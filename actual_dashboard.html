@@ -3216,6 +3216,18 @@
       background: var(--card); border: 1px dashed var(--border);
       border-radius: 12px;
     }
+    .conn-via-badge {
+      display: inline-block;
+      font-size: 9.5px; font-weight: 600;
+      padding: 2px 7px; margin-left: 6px;
+      background: rgba(139,92,246,0.18);
+      color: #B89AFA;
+      border-radius: 999px;
+      letter-spacing: 0.3px;
+      vertical-align: middle;
+    }
+    .conn-item-ids .status-good { color: #10D879; font-weight: 600; }
+    .conn-item-ids .status-bad  { color: #FF8C42; font-weight: 600; }
 
     /* Invite modal */
     .invite-modal-wrap {
@@ -11807,15 +11819,31 @@ function renderConnDiscoveryTab(platform) {
     return h;
   }
 
-  // Filter discovery results by search
+  // Filter discovery results by search + via + status
   var filtered = list.slice();
   if (connSearch) {
     filtered = filtered.filter(function(a) {
       var nm = (a.name || '').toLowerCase();
       var id = (a.id || '').toLowerCase();
-      return nm.indexOf(connSearch) !== -1 || id.indexOf(connSearch) !== -1;
+      var via = (a.via || '').toLowerCase();
+      return nm.indexOf(connSearch) !== -1 || id.indexOf(connSearch) !== -1 || via.indexOf(connSearch) !== -1;
     });
   }
+
+  // Default for Google: hide CANCELED/SUSPENDED/CLOSED + hidden flag unless includeAll
+  if (platform === 'google' && !connGoogleIncludeAll) {
+    filtered = filtered.filter(function(a) {
+      if (a.hidden) return false;
+      if (a.status && a.status !== 'ENABLED' && a.status !== 'UNKNOWN') return false;
+      return true;
+    });
+  }
+
+  // "Via" filter (only for google)
+  if (platform === 'google' && connGoogleViaFilter) {
+    filtered = filtered.filter(function(a) { return (a.via || '') === connGoogleViaFilter; });
+  }
+
   // Sort alphabetically by name (case-insensitive, locale-aware)
   filtered.sort(function(a, b) {
     var na = (a.name || a.id || '').toLowerCase();
@@ -11823,7 +11851,29 @@ function renderConnDiscoveryTab(platform) {
     return na.localeCompare(nb);
   });
 
+  // Search input
   h += '<div class="conn-search-wrap"><input class="conn-search-input" placeholder="' + escAttr(t('conn.searchPh')) + '" value="' + escAttr(connSearch) + '" oninput="setConnSearch(this.value)" /></div>';
+
+  // Google-specific filter bar
+  if (platform === 'google') {
+    var allVias = {};
+    list.forEach(function(a) { if (a.via) allVias[a.via] = (allVias[a.via] || 0) + 1; });
+    var viaKeys = Object.keys(allVias).sort();
+
+    h += '<div class="conn-bulk-bar" style="flex-wrap:wrap;">';
+    // Via filter buttons
+    h += '<span style="font-weight:600;color:var(--text-2);">' + t('conn.googleVia') + ':</span>';
+    h += '<button class="conn-bulk-btn' + (connGoogleViaFilter === null ? ' active' : '') + '" onclick="setConnGoogleVia(null)" style="' + (connGoogleViaFilter === null ? 'border-color:var(--lime);color:var(--lime);' : '') + '">' + t('conn.allVias') + ' (' + list.length + ')</button>';
+    viaKeys.forEach(function(v) {
+      var isActive = connGoogleViaFilter === v;
+      h += '<button class="conn-bulk-btn' + (isActive ? ' active' : '') + '" onclick="setConnGoogleVia(\'' + escAttr(v) + '\')" style="' + (isActive ? 'border-color:var(--lime);color:var(--lime);' : '') + '">' + escHtml(v) + ' (' + allVias[v] + ')</button>';
+    });
+    h += '<span style="flex:1;"></span>';
+    h += '<label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);cursor:pointer;">';
+    h += '  <input type="checkbox"' + (connGoogleIncludeAll ? ' checked' : '') + ' onchange="setConnGoogleIncludeAll(this.checked)" /> ' + t('conn.includeAllStatus');
+    h += '</label>';
+    h += '</div>';
+  }
 
   // Determine which ones are already managed
   var existingMeta   = {};
@@ -11834,6 +11884,14 @@ function renderConnDiscoveryTab(platform) {
     if (u.googleId)  existingGoogle[u.googleId.replace(/-/g, '')] = uid;
   });
 
+  // Showing count
+  h += '<div style="font-size:11.5px;color:var(--gray);margin-bottom:8px;">' + tf('conn.bulk.showing', filtered.length) + '</div>';
+
+  if (filtered.length === 0) {
+    h += '<div class="conn-empty">' + t('conn.noneFound') + '</div>';
+    return h;
+  }
+
   h += '<div class="conn-list">';
   filtered.forEach(function(a) {
     var alreadyAdded;
@@ -11843,12 +11901,19 @@ function renderConnDiscoveryTab(platform) {
     h += '<div class="conn-item">';
     h += '  <div class="conn-item-logo">' + escHtml(logo) + '</div>';
     h += '  <div class="conn-item-info">';
-    h += '    <div class="conn-item-name">' + escHtml(a.name || a.id) + '</div>';
+    h += '    <div class="conn-item-name">' + escHtml(a.name || a.id);
+    if (platform === 'google' && a.via) {
+      h += ' <span class="conn-via-badge">' + t('conn.via') + ': ' + escHtml(a.via) + '</span>';
+    }
+    h += '    </div>';
     var meta = [];
     meta.push('<span class="conn-item-pill platform-' + platform + '">' + platform.toUpperCase() + '</span> ' + escHtml(a.id));
     if (a.currency) meta.push(escHtml(a.currency));
-    if (a.mcc)      meta.push('MCC ' + escHtml(a.mcc));
-    if (a.status)   meta.push(escHtml(a.status));
+    if (a.status && a.status !== 'UNKNOWN') {
+      var stCls = a.status === 'ENABLED' ? 'status-good' : 'status-bad';
+      meta.push('<span class="' + stCls + '">' + escHtml(a.status) + '</span>');
+    }
+    if (a.hidden) meta.push('<span class="status-bad">🙈 ' + t('conn.googleHidden') + '</span>');
     h += '    <div class="conn-item-ids">' + meta.join(' &nbsp; · &nbsp; ') + '</div>';
     h += '  </div>';
     h += '  <div></div>';
@@ -11866,6 +11931,12 @@ function renderConnDiscoveryTab(platform) {
   h += '</div>';
   return h;
 }
+
+// Google discovery filters state
+var connGoogleViaFilter = null;
+var connGoogleIncludeAll = false;
+function setConnGoogleVia(v) { connGoogleViaFilter = v; buildConnectSection(); }
+function setConnGoogleIncludeAll(v) { connGoogleIncludeAll = !!v; buildConnectSection(); }
 
 async function runDiscovery(platform) {
   connDiscovering[platform] = true;
@@ -11911,58 +11982,106 @@ async function discoverMetaAccounts() {
 }
 
 async function discoverGoogleAccounts() {
-  var mccs = AGENCY_CONFIG.google.mcc || {};
-  var allAccs = [];
-  for (var key in mccs) {
-    var mccId = mccs[key];
-    if (!mccId) continue;
+  // 1) Listar todos los Customer IDs a los que el OAuth tiene acceso directo
+  var listHeaders = USE_PROXY ? { 'Content-Type': 'application/json' } : {
+    'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
+    'developer-token':  AGENCY_CONFIG.google.developerToken,
+    'Content-Type':     'application/json'
+  };
+  var listRes = await fetch(GOOGLEADS_BASE + 'customers:listAccessibleCustomers', {
+    method: 'GET',
+    headers: listHeaders
+  });
+  var listData = await listRes.json();
+  if (listData.error) {
+    console.warn('listAccessibleCustomers error:', listData.error);
+    throw new Error('Google listAccessibleCustomers: ' + (listData.error.message || JSON.stringify(listData.error)));
+  }
+  var customerIds = (listData.resourceNames || []).map(function(rn) {
+    return String(rn).replace('customers/', '');
+  });
+
+  // Map de MCCs conocidos para etiquetar el "via"
+  var mccLabels = AGENCY_CONFIG.google.mcc || {};
+  function labelFor(cid) {
+    for (var k in mccLabels) if (mccLabels[k] === cid) return k;
+    return null;
+  }
+
+  // 2) Para cada customer accesible, hacer una query en paralelo a su árbol
+  var queries = customerIds.map(async function(cid) {
     try {
-      var res = await fetch(GOOGLEADS_BASE + 'customers/' + mccId + '/googleAds:search', {
+      var headers = USE_PROXY ? {
+        'Content-Type':        'application/json',
+        'x-login-customer-id': cid
+      } : {
+        'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
+        'developer-token':  AGENCY_CONFIG.google.developerToken,
+        'login-customer-id': cid,
+        'Content-Type':     'application/json'
+      };
+      var res = await fetch(GOOGLEADS_BASE + 'customers/' + cid + '/googleAds:search', {
         method: 'POST',
-        headers: USE_PROXY ? {
-          'Content-Type':       'application/json',
-          'x-login-customer-id': mccId
-        } : {
-          'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
-          'developer-token':  AGENCY_CONFIG.google.developerToken,
-          'login-customer-id': mccId,
-          'Content-Type':     'application/json'
-        },
+        headers: headers,
         body: JSON.stringify({
-          query: "SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.status, customer_client.manager, customer_client.hidden FROM customer_client WHERE customer_client.level <= 2"
+          query: "SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.status, customer_client.manager, customer_client.hidden, customer_client.level FROM customer_client"
         })
       });
       var data = await res.json();
       if (data.error) {
-        console.warn('Google discovery error MCC ' + mccId + ':', data.error);
-        continue;
+        console.warn('Discovery error for ' + cid + ':', data.error);
+        return { rootId: cid, rows: [] };
       }
-      (data.results || []).forEach(function(r) {
-        var c = r.customerClient || {};
-        if (c.manager) return;     // skip MCCs themselves
-        if (c.hidden)  return;     // skip hidden accounts
-        if (c.status && c.status !== 'ENABLED') return;
-        var idStr = String(c.id || '');
-        // Format as 123-456-7890
-        var formatted = idStr.length === 10 ? (idStr.slice(0,3) + '-' + idStr.slice(3,6) + '-' + idStr.slice(6)) : idStr;
-        allAccs.push({
-          id: formatted,
-          name: c.descriptiveName || ('Account ' + idStr),
-          currency: c.currencyCode,
-          status: c.status,
-          mcc: key
-        });
-      });
+      return { rootId: cid, rows: data.results || [] };
     } catch (e) {
-      console.warn('Google discovery exception MCC ' + mccId + ':', e);
+      console.warn('Discovery exception ' + cid + ':', e);
+      return { rootId: cid, rows: [] };
     }
-  }
-  // Dedup by id (Renew shows up under both MCCs)
+  });
+  var fetched = await Promise.all(queries);
+
+  // 3) Aplanar + dedup
   var seen = {};
-  var uniq = [];
-  allAccs.forEach(function(a) { if (!seen[a.id]) { seen[a.id] = 1; uniq.push(a); } });
+  var allAccs = [];
+  fetched.forEach(function(result) {
+    var rootId = result.rootId;
+    var viaLabel = labelFor(rootId);
+    // Determinar si el root es un MCC mirando su entry level=0 en sus propios resultados
+    var rootIsManager = false;
+    var rootName = null;
+    result.rows.forEach(function(r) {
+      var c = r.customerClient || {};
+      if (String(c.id) === rootId) {
+        rootIsManager = !!c.manager;
+        rootName = c.descriptiveName;
+      }
+    });
+    // Si no detectamos un nombre de root y no hay etiqueta MCC conocida, usar el ID
+    var fallbackVia = viaLabel || (rootIsManager ? ('MCC ' + rootId) : 'Acceso directo');
+
+    result.rows.forEach(function(r) {
+      var c = r.customerClient || {};
+      if (c.manager) return; // saltear MCCs (no son cuentas operables)
+      var idStr = String(c.id || '');
+      if (!idStr) return;
+      var formatted = idStr.length === 10 ? (idStr.slice(0,3) + '-' + idStr.slice(3,6) + '-' + idStr.slice(6)) : idStr;
+      if (seen[formatted]) return; // dedup
+      seen[formatted] = true;
+      allAccs.push({
+        id: formatted,
+        name: c.descriptiveName || ('Account ' + idStr),
+        currency: c.currencyCode,
+        status: c.status || 'UNKNOWN',
+        hidden: !!c.hidden,
+        level: c.level,
+        via: fallbackVia,
+        mcc: viaLabel || null
+      });
+    });
+  });
+
   var cache = loadDiscoveryCache();
-  cache.google = uniq;
+  cache.google = allAccs;
   cache.ts = Date.now();
   saveDiscoveryCache(cache);
 }
@@ -13573,6 +13692,11 @@ var TRANSLATIONS = {
   'conn.addBtn':                 { es: 'Agregar al panel', en: 'Add to panel', pt: 'Adicionar ao painel', de: 'Zum Panel hinzufügen', zh: '添加到面板' },
   'conn.added':                  { es: '{0} agregada al panel', en: '{0} added to panel', pt: '{0} adicionada ao painel', de: '{0} zum Panel hinzugefügt', zh: '{0} 已添加到面板' },
   'conn.noMetaToken':            { es: 'No hay token de Meta configurado en AGENCY_CONFIG.', en: 'No Meta token configured in AGENCY_CONFIG.', pt: 'Sem token Meta em AGENCY_CONFIG.', de: 'Kein Meta-Token in AGENCY_CONFIG.', zh: 'AGENCY_CONFIG 中没有 Meta 令牌。' },
+  'conn.googleVia':              { es: 'Vía', en: 'Via', pt: 'Via', de: 'Via', zh: '来源' },
+  'conn.via':                    { es: 'Vía', en: 'Via', pt: 'Via', de: 'Via', zh: '来源' },
+  'conn.allVias':                { es: 'Todas', en: 'All', pt: 'Todas', de: 'Alle', zh: '全部' },
+  'conn.includeAllStatus':       { es: 'Incluir canceladas/ocultas', en: 'Include canceled/hidden', pt: 'Incluir canceladas/ocultas', de: 'Storniert/ausgeblendet einschließen', zh: '包含已取消/隐藏' },
+  'conn.googleHidden':           { es: 'Oculta en Google', en: 'Hidden in Google', pt: 'Oculta no Google', de: 'In Google ausgeblendet', zh: 'Google 中隐藏' },
 
   // Filter por responsable
   'filter.byOwner':         { es: 'Por responsable', en: 'By owner', pt: 'Por responsável', de: 'Nach Verantwortlichem', zh: '按负责人' },

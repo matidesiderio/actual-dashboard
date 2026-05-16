@@ -138,7 +138,7 @@ async function handleGoogleAds(request, env, url, corsHdrs) {
   if (!env.GOOGLE_DEVELOPER_TOKEN) throw new Error('GOOGLE_DEVELOPER_TOKEN secret not configured');
 
   const subPath = url.pathname.replace(/^\/google-ads\//, '');
-  const upstream = 'https://googleads.googleapis.com/v16/' + subPath;
+  const upstream = 'https://googleads.googleapis.com/v20/' + subPath;
 
   const loginCustId = request.headers.get('x-login-customer-id') || '';
   const token = await getGoogleAccessToken(env);
