@@ -1,0 +1,52 @@
+# Credenciales locales (nunca subir)
+credentials.json
+credentials.backup.*.json
+gmail_credentials.json
+gmail_token.json
+*.env
+.env.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Logs y temporales
+*.log
+.DS_Store
+Thumbs.db
+
+# Data privada / outputs de scripts
+*_raw.json
+*_state.json
+*_accounts.json
+*_status_raw.json
+*_audit.json
+*_keywords.json
+*_search_terms.json
+*_categorias.json
+*_kw_full.json
+*_geo_ids*.json
+audit_*.json
+pointer_*.json
+ferreiro_*.json
+jotabe_*.json
+kohan_raw_data.json
+rincon_raw_data.json
+renew_*_raw.json
+amba_*.json
+gran_baron_*.json
+estudio_*.json
+pending_*.json
+monitor_*.json
+actualcomgads_*.json
+
+# Editores
+.vscode/
+.idea/
+.claude/
+
+# Build / cache temporal
+*.tmp
+*.bak
