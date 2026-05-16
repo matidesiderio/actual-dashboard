@@ -6115,6 +6115,26 @@ const METRIC_DEFS = {
 // handles:   usuario de cada red social (sin @)
 // metaAccId: ID de cuenta de Meta Ads (para Paid Media)
 // googleId:  ID de cuenta Google Ads
+// One-shot reset (corre una sola vez en cada browser que cargue esta versión).
+// Limpia datos legacy de pruebas previas. Después del primer load se inactiva.
+(function() {
+  try {
+    var FLAG = 'actual_reset_v2_20260516';
+    if (!localStorage.getItem(FLAG)) {
+      [
+        'actual_extra_accounts',
+        'actual_account_visibility',
+        'actual_discovery_cache',
+        'actual_team_members',
+        'actual_client_assignments',
+        'actual_session_role',
+        'actual_session_member_id'
+      ].forEach(function(k) { localStorage.removeItem(k); });
+      localStorage.setItem(FLAG, '1');
+    }
+  } catch(e) { /* ignore */ }
+})();
+
 const USERS = {
   // Las cuentas de clientes se agregan dinámicamente desde
   // "🔌 Conexión y Cuentas" — Descubrir Meta / Descubrir Google.
