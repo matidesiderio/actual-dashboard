@@ -6116,50 +6116,9 @@ const METRIC_DEFS = {
 // metaAccId: ID de cuenta de Meta Ads (para Paid Media)
 // googleId:  ID de cuenta Google Ads
 const USERS = {
-  "kohan": {
-    password: "kohan2026", clientName: "Kohan Atelier", logo: "KA",
-    platforms: ["ig", "fb"],
-    handles:   { ig: "kohanatelier", fb: "Kohan Atelier" },
-    igBusinessId: "17841474232219987",  // IG Business Account ID (Graph API)
-    fbPageId:     "636067146259631",    // Facebook Page ID (Graph API)
-    metaAccId: "act_1736584613593475", googleId: "5176600568"
-  },
-  "granbaron": {
-    password: "baron2026", clientName: "Gran Baron", logo: "GB",
-    platforms: ["ig"],
-    handles:   { ig: "granbaron" },
-    metaAccId: "act_2159527708189266", googleId: "1301585164"
-  },
-  "renew": {
-    password: "renew2026", clientName: "Renew Financial", logo: "RF",
-    platforms: ["ig"],
-    handles:   { ig: "renewfinancial" },
-    metaAccId: "act_526263314232724", googleId: "9840734433"
-  },
-  "ekosher": {
-    password: "kosher2026", clientName: "E-KOSHER", logo: "EK",
-    platforms: ["ig"],
-    handles:   { ig: "ekosherarg" },
-    metaAccId: null, googleId: "6718514463"
-  },
-  "plug": {
-    password: "plug2026", clientName: "Plug Arquitectura", logo: "PA",
-    platforms: ["ig"],
-    handles:   { ig: "plugarquitectura" },
-    metaAccId: "act_168377545094496", googleId: "2185293913"
-  },
-  "cotishop": {
-    password: "coti2026", clientName: "Cotishop", logo: "CO",
-    platforms: ["ig"],
-    handles:   { ig: "cotishop" },
-    metaAccId: null, googleId: "7776812662"
-  },
-  "ivess": {
-    password: "ivess2026", clientName: "Tu Agua Ivess", logo: "IV",
-    platforms: ["ig"],
-    handles:   { ig: "ivessagua" },
-    metaAccId: null, googleId: "5162301170"
-  },
+  // Las cuentas de clientes se agregan dinámicamente desde
+  // "🔌 Conexión y Cuentas" — Descubrir Meta / Descubrir Google.
+  // Se persisten en localStorage (actual_extra_accounts).
   "admin": {
     password: "actual2026", clientName: "Actual Comunicaciones", logo: "AC",
     isAdmin: true, platforms: ["ig","tt","yt"], handles: {}
