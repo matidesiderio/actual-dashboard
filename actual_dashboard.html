@@ -6119,7 +6119,7 @@ const METRIC_DEFS = {
 // Limpia datos legacy de pruebas previas. Después del primer load se inactiva.
 (function() {
   try {
-    var FLAG = 'actual_reset_v2_20260516';
+    var FLAG = 'actual_reset_v3_20260516';
     if (!localStorage.getItem(FLAG)) {
       [
         'actual_extra_accounts',
@@ -11791,6 +11791,9 @@ function renderConnDiscoveryTab(platform) {
   } else {
     h += '  <span class="conn-discover-hint">' + t('conn.neverDiscovered') + '</span>';
   }
+  if (list.length > 0) {
+    h += '  <button class="conn-bulk-btn" onclick="clearDiscoveryCache(\'' + platform + '\')" style="margin-left:auto;">🗑 ' + t('conn.clearResults') + '</button>';
+  }
   h += '</div>';
 
   if (list.length === 0) {
@@ -11916,6 +11919,17 @@ var connGoogleViaFilter = null;
 var connGoogleIncludeAll = false;
 function setConnGoogleVia(v) { connGoogleViaFilter = v; buildConnectSection(); }
 function setConnGoogleIncludeAll(v) { connGoogleIncludeAll = !!v; buildConnectSection(); }
+
+// Clear cached discovery results for a platform (UI-side reset)
+function clearDiscoveryCache(platform) {
+  var cache = loadDiscoveryCache();
+  if (platform === 'meta')   cache.meta = [];
+  if (platform === 'google') cache.google = [];
+  // Si ambos quedan vacíos, también limpiamos el timestamp
+  if ((cache.meta || []).length === 0 && (cache.google || []).length === 0) cache.ts = 0;
+  saveDiscoveryCache(cache);
+  buildConnectSection();
+}
 
 async function runDiscovery(platform) {
   connDiscovering[platform] = true;
@@ -13676,6 +13690,7 @@ var TRANSLATIONS = {
   'conn.allVias':                { es: 'Todas', en: 'All', pt: 'Todas', de: 'Alle', zh: '全部' },
   'conn.includeAllStatus':       { es: 'Incluir canceladas/ocultas', en: 'Include canceled/hidden', pt: 'Incluir canceladas/ocultas', de: 'Storniert/ausgeblendet einschließen', zh: '包含已取消/隐藏' },
   'conn.googleHidden':           { es: 'Oculta en Google', en: 'Hidden in Google', pt: 'Oculta no Google', de: 'In Google ausgeblendet', zh: 'Google 中隐藏' },
+  'conn.clearResults':           { es: 'Borrar resultados', en: 'Clear results', pt: 'Limpar resultados', de: 'Ergebnisse löschen', zh: '清除结果' },
 
   // Filter por responsable
   'filter.byOwner':         { es: 'Por responsable', en: 'By owner', pt: 'Por responsável', de: 'Nach Verantwortlichem', zh: '按负责人' },
