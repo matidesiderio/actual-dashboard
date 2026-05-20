@@ -3157,7 +3157,7 @@
       align-items: center; gap: 14px;
       background: var(--card); border: 1px solid var(--border);
       border-radius: 10px; padding: 12px 16px;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     }
     .conn-edit-btn {
       background: transparent; border: 1px solid var(--border);
@@ -3166,6 +3166,86 @@
       transition: all 0.15s; color: var(--text-2);
     }
     .conn-edit-btn:hover { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+
+    /* Edit button with label (more visible) */
+    .conn-edit-btn-labeled {
+      background: transparent; border: 1px solid var(--border);
+      padding: 7px 14px; border-radius: 7px;
+      cursor: pointer; font-size: 12px; font-weight: 600;
+      font-family: 'Sora', sans-serif; letter-spacing: 0.3px;
+      transition: all 0.15s; color: var(--text-2);
+      display: inline-flex; align-items: center; gap: 6px;
+      white-space: nowrap;
+    }
+    .conn-edit-btn-labeled:hover {
+      border-color: var(--lime); color: var(--lime);
+      background: var(--lime-soft);
+    }
+
+    /* Whole-card click affordance */
+    .conn-item-clickable { cursor: pointer; }
+    .conn-item-clickable:hover {
+      border-color: var(--lime);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    }
+
+    /* Mis Clientes header */
+    .clients-list-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 14px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .clients-list-title {
+      font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700;
+      color: var(--white); letter-spacing: 0.3px;
+      display: inline-flex; align-items: center; gap: 12px;
+    }
+    .clients-list-count {
+      font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+      background: var(--lime-soft); color: var(--lime);
+      padding: 3px 10px; border-radius: 999px;
+      letter-spacing: 0.4px;
+    }
+    .clients-add-btn {
+      background: var(--lime); color: #fff; border: none;
+      font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 700;
+      letter-spacing: 0.5px; padding: 10px 18px; border-radius: 8px;
+      cursor: pointer; box-shadow: 0 4px 14px var(--lime-soft);
+      transition: filter 0.15s, transform 0.15s;
+    }
+    .clients-add-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+    /* Empty state */
+    .clients-empty-hero {
+      text-align: center; padding: 60px 20px 50px;
+      background: var(--card); border: 1px dashed var(--border);
+      border-radius: 14px;
+    }
+    .clients-empty-icon { font-size: 48px; margin-bottom: 14px; }
+    .clients-empty-title {
+      font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700;
+      color: var(--white); margin-bottom: 6px;
+    }
+    .clients-empty-sub {
+      font-size: 13px; color: var(--gray); margin-bottom: 26px;
+      max-width: 460px; margin-left: auto; margin-right: auto; line-height: 1.45;
+    }
+    .clients-empty-cta {
+      background: var(--lime); color: #fff; border: none;
+      font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
+      letter-spacing: 0.5px; padding: 12px 24px; border-radius: 10px;
+      cursor: pointer; box-shadow: 0 6px 20px var(--lime-soft);
+      transition: filter 0.15s, transform 0.15s;
+    }
+    .clients-empty-cta:hover { filter: brightness(1.1); transform: translateY(-2px); }
+    .clients-empty-alt {
+      margin-top: 22px;
+      font-size: 11.5px; color: var(--gray);
+    }
+    .clients-empty-discover-btns {
+      margin-top: 10px;
+      display: inline-flex; gap: 10px;
+    }
 
     /* Client wizard: select dropdown */
     .cw-select {
@@ -11738,7 +11818,8 @@ function buildConnectSection() {
 }
 
 function renderConnManagedTab() {
-  var ids = Object.keys(USERS).filter(function(id) { return !USERS[id].isAdmin; });
+  var allIds = Object.keys(USERS).filter(function(id) { return !USERS[id].isAdmin; });
+  var ids = allIds.slice();
   var search = connSearch;
   if (search) {
     ids = ids.filter(function(id) {
@@ -11754,14 +11835,36 @@ function renderConnManagedTab() {
   });
 
   var h = '';
-  // Top action bar: New Client wizard
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">';
-  h += '  <button class="btn-team-invite" onclick="showClientWizardModal(null)">+ ' + t('clients.newClient') + '</button>';
-  h += '  <span style="font-size:11.5px;color:var(--gray);">' + t('clients.newClientHint') + '</span>';
+
+  // ── Empty state: no clients at all ─────────────────────────
+  if (allIds.length === 0) {
+    h += '<div class="clients-empty-hero">';
+    h += '  <div class="clients-empty-icon">👋</div>';
+    h += '  <div class="clients-empty-title">' + t('clients.empty.title') + '</div>';
+    h += '  <div class="clients-empty-sub">' + t('clients.empty.sub') + '</div>';
+    h += '  <button class="clients-empty-cta" onclick="showClientWizardModal(null)">+ ' + t('clients.empty.cta') + '</button>';
+    h += '  <div class="clients-empty-alt">' + t('clients.empty.altHint') + '</div>';
+    h += '  <div class="clients-empty-discover-btns">';
+    h += '    <button class="conn-bulk-btn" onclick="setConnTab(\'meta\')">🔍 ' + t('conn.tabs.discoverMeta') + '</button>';
+    h += '    <button class="conn-bulk-btn" onclick="setConnTab(\'google\')">🔍 ' + t('conn.tabs.discoverGoogle') + '</button>';
+    h += '  </div>';
+    h += '</div>';
+    return h;
+  }
+
+  // ── Header with count + primary CTA ────────────────────────
+  h += '<div class="clients-list-header">';
+  h += '  <div class="clients-list-title">';
+  h += '    📋 ' + t('clients.myClients');
+  h += '    <span class="clients-list-count">' + allIds.length + '</span>';
+  h += '  </div>';
+  h += '  <button class="clients-add-btn" onclick="showClientWizardModal(null)">+ ' + t('clients.newClient') + '</button>';
   h += '</div>';
+
+  // Search
   h += '<div class="conn-search-wrap"><input class="conn-search-input" id="conn-search-input" placeholder="' + escAttr(t('conn.searchPh')) + '" value="' + escAttr(connSearch) + '" oninput="setConnSearch(this.value)" /></div>';
 
-  // Bulk actions
+  // Bulk actions bar
   h += '<div class="conn-bulk-bar">';
   h += '  <span>' + tf('conn.bulk.showing', ids.length) + '</span>';
   h += '  <span style="flex:1;"></span>';
@@ -11770,7 +11873,7 @@ function renderConnManagedTab() {
   h += '</div>';
 
   if (ids.length === 0) {
-    h += '<div class="conn-empty">' + t('conn.noAccounts') + '</div>';
+    h += '<div class="conn-empty">' + t('clients.noMatchSearch') + '</div>';
     return h;
   }
 
@@ -11779,7 +11882,7 @@ function renderConnManagedTab() {
     var u = USERS[id];
     var vis = getAccountVisibility(id);
     var logo = u.logo || (u.clientName || id).substring(0, 2).toUpperCase();
-    h += '<div class="conn-item ' + vis + '">';
+    h += '<div class="conn-item conn-item-clickable ' + vis + '" onclick="showClientWizardModal(\'' + id + '\')">';
     h += '  <div class="conn-item-logo">' + escHtml(logo) + '</div>';
     h += '  <div class="conn-item-info">';
     h += '    <div class="conn-item-name">' + escHtml(u.clientName || id);
@@ -11791,10 +11894,10 @@ function renderConnManagedTab() {
     if (idParts.length === 0) idParts.push('<span style="color:var(--gray);">' + t('conn.noPlatformIds') + '</span>');
     h += '    <div class="conn-item-ids">' + idParts.join(' &nbsp; ') + '</div>';
     h += '  </div>';
-    // Edit button
-    h += '  <button class="conn-edit-btn" onclick="showClientWizardModal(\'' + id + '\')" title="' + escAttr(t('clients.editTip')) + '">✏️</button>';
-    // Visibility 3-way toggle
-    h += '  <div class="conn-vis-toggle">';
+    // Edit button (with label)
+    h += '  <button class="conn-edit-btn-labeled" onclick="event.stopPropagation();showClientWizardModal(\'' + id + '\')" title="' + escAttr(t('clients.editTip')) + '">✏️ ' + t('clients.edit') + '</button>';
+    // Visibility 3-way toggle (stops propagation to avoid opening editor)
+    h += '  <div class="conn-vis-toggle" onclick="event.stopPropagation();">';
     h += '    <button class="conn-vis-btn vis-active' + (vis === 'active' ? ' active' : '') + '" onclick="setAccountVisAndRefresh(\'' + id + '\',\'active\')" title="' + escAttr(t('conn.vis.activeTip')) + '">✓ ' + t('conn.vis.active') + '</button>';
     h += '    <button class="conn-vis-btn vis-hidden' + (vis === 'hidden' ? ' active' : '') + '" onclick="setAccountVisAndRefresh(\'' + id + '\',\'hidden\')" title="' + escAttr(t('conn.vis.hiddenTip')) + '">🙈 ' + t('conn.vis.hidden') + '</button>';
     h += '    <button class="conn-vis-btn vis-archived' + (vis === 'archived' ? ' active' : '') + '" onclick="setAccountVisAndRefresh(\'' + id + '\',\'archived\')" title="' + escAttr(t('conn.vis.archivedTip')) + '">📦 ' + t('conn.vis.archived') + '</button>';
@@ -13952,6 +14055,13 @@ var TRANSLATIONS = {
   'clients.newClient':           { es: 'Nuevo Cliente', en: 'New Client', pt: 'Novo Cliente', de: 'Neuer Kunde', zh: '新客户' },
   'clients.newClientHint':       { es: 'Crea un cliente y vinculá sus cuentas Meta y Google en un solo paso.', en: 'Create a client and link both Meta and Google accounts in one step.', pt: 'Crie um cliente e vincule contas Meta e Google em uma etapa.', de: 'Erstellen Sie einen Kunden und verknüpfen Sie Meta + Google in einem Schritt.', zh: '一步创建客户并关联 Meta 和 Google 账户。' },
   'clients.editTip':             { es: 'Editar cliente', en: 'Edit client', pt: 'Editar cliente', de: 'Kunde bearbeiten', zh: '编辑客户' },
+  'clients.edit':                { es: 'Editar', en: 'Edit', pt: 'Editar', de: 'Bearbeiten', zh: '编辑' },
+  'clients.myClients':           { es: 'Mis Clientes', en: 'My Clients', pt: 'Meus Clientes', de: 'Meine Kunden', zh: '我的客户' },
+  'clients.noMatchSearch':       { es: 'No hay clientes que coincidan con tu búsqueda.', en: 'No clients match your search.', pt: 'Nenhum cliente corresponde à busca.', de: 'Keine Kunden gefunden.', zh: '没有匹配的客户。' },
+  'clients.empty.title':         { es: 'Todavía no tenés clientes', en: 'No clients yet', pt: 'Sem clientes ainda', de: 'Noch keine Kunden', zh: '还没有客户' },
+  'clients.empty.sub':           { es: 'Creá tu primer cliente vinculando sus cuentas de Meta Ads y/o Google Ads. Lo podés hacer manualmente o descubrir las cuentas existentes.', en: 'Create your first client by linking their Meta Ads and/or Google Ads accounts. You can do it manually or discover existing accounts.', pt: 'Crie seu primeiro cliente vinculando suas contas Meta e/ou Google Ads.', de: 'Erstellen Sie Ihren ersten Kunden, indem Sie Meta- und/oder Google Ads-Konten verknüpfen.', zh: '通过关联其 Meta Ads 和/或 Google Ads 账户创建您的第一个客户。' },
+  'clients.empty.cta':           { es: 'Crear primer cliente', en: 'Create first client', pt: 'Criar primeiro cliente', de: 'Ersten Kunden anlegen', zh: '创建第一个客户' },
+  'clients.empty.altHint':       { es: 'o descubrí cuentas existentes desde:', en: 'or discover existing accounts from:', pt: 'ou descubra contas existentes em:', de: 'oder vorhandene Konten entdecken:', zh: '或从以下位置发现现有账户：' },
   'clients.wiz.newTitle':        { es: '➕ Nuevo Cliente', en: '➕ New Client', pt: '➕ Novo Cliente', de: '➕ Neuer Kunde', zh: '➕ 新客户' },
   'clients.wiz.editTitle':       { es: '✏️ Editar Cliente', en: '✏️ Edit Client', pt: '✏️ Editar Cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
   'clients.wiz.name':            { es: 'Nombre del cliente', en: 'Client name', pt: 'Nome do cliente', de: 'Kundenname', zh: '客户名称' },
