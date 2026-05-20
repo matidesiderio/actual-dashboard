@@ -4713,6 +4713,17 @@
       font-family: 'Sora', sans-serif; transition: opacity 0.15s;
     }
     .drawer-btn-report:hover { opacity: 0.88; }
+    .drawer-btn-edit {
+      padding: 11px 16px; border-radius: 8px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-2); font-family: 'Sora', sans-serif;
+      font-weight: 600; font-size: 12px; cursor: pointer;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .drawer-btn-edit:hover {
+      border-color: var(--lime); color: var(--lime);
+      background: var(--lime-soft);
+    }
 
     .acc-card-header {
       display: flex; align-items: center; gap: 10px;
@@ -5609,7 +5620,6 @@
         <div id="lang-dropdown-report" class="lang-dropdown"></div>
       </div>
       <button class="btn-back-admin" id="btn-back-admin" onclick="adminBackFromClient()" data-i18n="report.backToAdmin">← Volver al admin</button>
-      <button class="btn-ghost" id="btn-edit-client" onclick="editCurrentReportClient()" style="display:none;font-size:12px;padding:7px 12px;" data-i18n="report.editClient">✏️ Editar cliente</button>
       <button class="btn-ghost" id="btn-refresh" onclick="refreshData()" style="font-size:12px;padding:7px 12px;" data-i18n="report.refresh">🔄 Actualizar</button>
       <button class="btn-ghost" onclick="logout()" style="font-size:12px;padding:7px 12px;color:var(--gray);" data-i18n="report.logout">↩ Salir</button>
     </div>
@@ -9381,7 +9391,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-20-editClient-v2', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-20-editClient-v3-drawer', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -9931,11 +9941,9 @@ function selectAdminClient(userId) {
 }
 
 function adminViewClient(userId) {
-  // Show back + edit buttons in navbar so admin can return / edit without logging out
+  // Show back button in navbar so admin can return without logging out
   var backBtn = document.getElementById('btn-back-admin');
   if (backBtn) backBtn.style.display = 'inline-flex';
-  var editBtn = document.getElementById('btn-edit-client');
-  if (editBtn) editBtn.style.display = 'inline-flex';
   // Launch the client dashboard directly from admin
   autoStartClient(userId);
 }
@@ -9943,18 +9951,7 @@ function adminViewClient(userId) {
 function adminBackFromClient() {
   var backBtn = document.getElementById('btn-back-admin');
   if (backBtn) backBtn.style.display = 'none';
-  var editBtn = document.getElementById('btn-edit-client');
-  if (editBtn) editBtn.style.display = 'none';
   showAdminScreen();
-}
-
-// Open the client wizard pre-filled with the currently-viewed client
-function editCurrentReportClient() {
-  var uid = (APP.config && APP.config.userId) || null;
-  if (!uid) return;
-  if (typeof showClientWizardModal === 'function') {
-    showClientWizardModal(uid);
-  }
 }
 
 function addNewAdminClient() {
@@ -13977,6 +13974,7 @@ var TRANSLATIONS = {
   'drawer.noOptimizations': { es: '✓ Sin alertas activas para este período.', en: '✓ No active alerts for this period.', pt: '✓ Sem alertas ativos para este período.', de: '✓ Keine aktiven Warnungen für diesen Zeitraum.', zh: '✓ 此期间无活跃警报。' },
   'drawer.riskScore':       { es: 'Score de riesgo', en: 'Risk score', pt: 'Pontuação de risco', de: 'Risiko-Score', zh: '风险评分' },
   'drawer.viewFullReport':  { es: 'Ver reporte completo →', en: 'View full report →', pt: 'Ver relatório completo →', de: 'Vollständigen Bericht ansehen →', zh: '查看完整报告 →' },
+  'drawer.editClient':      { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
   'drawer.noData':          { es: 'Sin datos para el período seleccionado.', en: 'No data for the selected period.', pt: 'Sem dados para o período selecionado.', de: 'Keine Daten für den gewählten Zeitraum.', zh: '所选期间无数据。' },
   'drawer.noPlatforms':     { es: 'Sin plataformas', en: 'No platforms', pt: 'Sem plataformas', de: 'Keine Plattformen', zh: '无平台' },
   'drawer.pts':             { es: 'pts', en: 'pts', pt: 'pts', de: 'pts', zh: '分' },
@@ -16575,6 +16573,15 @@ function openAccDrawer(userId) {
     closeAccDrawer();
     adminViewClient(userId);
   };
+  // Edit button (opens client wizard pre-filled, only for admin/owner)
+  var editBtn = document.getElementById('drawer-btn-edit');
+  if (editBtn) {
+    editBtn.style.display = (typeof isOwner === 'function' && isOwner()) ? '' : 'none';
+    editBtn.onclick = function() {
+      closeAccDrawer();
+      if (typeof showClientWizardModal === 'function') showClientWizardModal(userId);
+    };
+  }
 
   // Body
   var html = '';
@@ -16714,6 +16721,7 @@ function buildOptimizations(meta, risk) {
   </div>
   <div class="drawer-body" id="drawer-body"></div>
   <div class="drawer-footer">
+    <button class="drawer-btn-edit" id="drawer-btn-edit" data-i18n="drawer.editClient">✏️ Editar cliente</button>
     <button class="drawer-btn-report" id="drawer-btn-report" data-i18n="drawer.viewFullReport">Ver reporte completo →</button>
   </div>
 </div>
