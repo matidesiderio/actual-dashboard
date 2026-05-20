@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Anti-cache: forzar siempre versión fresca -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Actual Comunicaciones — Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -9342,6 +9346,8 @@ function toggleTheme() {
 })();
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
+  // Version stamp — visible in console (F12) to verify which build is loaded
+  console.log('%c[Actual Dashboard] build 2026-05-20-startsWith-v1', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
