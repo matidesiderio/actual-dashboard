@@ -3072,6 +3072,29 @@
     .team-pts-drawer-line.good   { border-left-color: #10D879; }
     .team-pts-drawer-icon { font-size: 16px; flex-shrink: 0; }
 
+    /* Clientes — sub-tab bar */
+    .clients-subtab-bar {
+      display: flex; gap: 0;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .clients-subtab {
+      background: transparent; border: none;
+      font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600;
+      letter-spacing: 0.3px; color: var(--gray);
+      padding: 14px 22px;
+      cursor: pointer; transition: color 0.15s, border-color 0.15s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -1px;
+    }
+    .clients-subtab:hover { color: var(--white); }
+    .clients-subtab.active {
+      color: var(--lime);
+      border-bottom-color: var(--lime);
+    }
+
     /* Conexión y Cuentas */
     .conn-section-body { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
     .conn-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 22px; }
@@ -3130,12 +3153,33 @@
     /* Account list */
     .conn-list { display: flex; flex-direction: column; gap: 8px; }
     .conn-item {
-      display: grid; grid-template-columns: 32px 1fr auto auto;
+      display: grid; grid-template-columns: 32px 1fr auto auto auto;
       align-items: center; gap: 14px;
       background: var(--card); border: 1px solid var(--border);
       border-radius: 10px; padding: 12px 16px;
       transition: border-color 0.15s;
     }
+    .conn-edit-btn {
+      background: transparent; border: 1px solid var(--border);
+      width: 32px; height: 32px; border-radius: 7px;
+      cursor: pointer; font-size: 14px;
+      transition: all 0.15s; color: var(--text-2);
+    }
+    .conn-edit-btn:hover { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+
+    /* Client wizard: select dropdown */
+    .cw-select {
+      width: 100%;
+      background: var(--surface-2); color: var(--white);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+    }
+    .cw-select:focus { outline: none; border-color: var(--lime); }
+    .cw-select option:disabled { color: #555; }
+    [data-theme="light"] .cw-select { background: #FFFFFF; color: #1a1a1a; }
+    [data-theme="light"] .cw-select option:disabled { color: #ccc; }
     .conn-item:hover { border-color: var(--lime); }
     .conn-item.hidden   { opacity: 0.55; }
     .conn-item.archived { opacity: 0.4; }
@@ -5219,9 +5263,8 @@
     <!-- Nav buttons -->
     <div class="admin-nav-section">
       <button class="admin-nav-btn active" id="admin-nav-overview" onclick="switchAdminSection('overview')" data-i18n="nav.overview">📊 Rendimiento de mis Cuentas</button>
-      <button class="admin-nav-btn" id="admin-nav-cuentas" onclick="switchAdminSection('cuentas')" data-i18n="nav.cuentas">👥 Cuentas Vinculadas</button>
+      <button class="admin-nav-btn" id="admin-nav-clients" onclick="enterClientsSection()" data-i18n="nav.clients">📋 Clientes</button>
       <button class="admin-nav-btn owner-only" id="admin-nav-team" onclick="switchAdminSection('team')" data-i18n="nav.team">🧑‍💼 Mi Equipo</button>
-      <button class="admin-nav-btn owner-only" id="admin-nav-connect" onclick="switchAdminSection('connect')" data-i18n="nav.connect">🔌 Conexión y Cuentas</button>
       <button class="admin-nav-btn" id="admin-nav-config" onclick="switchAdminSection('config')" data-i18n="nav.config">⚙️ Configuración</button>
     </div>
 
@@ -5302,6 +5345,11 @@
 
     <!-- CUENTAS section -->
     <div id="admin-section-cuentas" class="agency-section">
+      <!-- Tab bar: "Cuentas" / "Configuración" (sub-tabs de Clientes) -->
+      <div class="clients-subtab-bar">
+        <button class="clients-subtab owner-only" onclick="switchAdminSection('connect')" data-i18n="clients.tab.accounts">📋 Cuentas</button>
+        <button class="clients-subtab active" onclick="switchAdminSection('cuentas')" data-i18n="clients.tab.config">⚙️ Configuración</button>
+      </div>
       <div class="cuentas-section-topbar">
         <label class="dp-switch editor-global-switch" title="" data-i18n-title="editor.globalSwitchTip">
           <input type="checkbox" id="cuentas-global-switch-cb" onchange="toggleEditorGlobalScope(this.checked)">
@@ -11653,6 +11701,11 @@ function buildConnectSection() {
   var counts = getAccountCounts();
 
   var h = '';
+  // Tab bar: "Cuentas" / "Configuración"
+  h += '<div class="clients-subtab-bar">';
+  h += '  <button class="clients-subtab active owner-only" onclick="switchAdminSection(\'connect\')">📋 ' + t('clients.tab.accounts') + '</button>';
+  h += '  <button class="clients-subtab" onclick="switchAdminSection(\'cuentas\')">⚙️ ' + t('clients.tab.config') + '</button>';
+  h += '</div>';
   h += '<div class="conn-section-body">';
   h += '  <div class="conn-header">';
   h += '    <div>';
@@ -11701,6 +11754,11 @@ function renderConnManagedTab() {
   });
 
   var h = '';
+  // Top action bar: New Client wizard
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">';
+  h += '  <button class="btn-team-invite" onclick="showClientWizardModal(null)">+ ' + t('clients.newClient') + '</button>';
+  h += '  <span style="font-size:11.5px;color:var(--gray);">' + t('clients.newClientHint') + '</span>';
+  h += '</div>';
   h += '<div class="conn-search-wrap"><input class="conn-search-input" id="conn-search-input" placeholder="' + escAttr(t('conn.searchPh')) + '" value="' + escAttr(connSearch) + '" oninput="setConnSearch(this.value)" /></div>';
 
   // Bulk actions
@@ -11733,6 +11791,8 @@ function renderConnManagedTab() {
     if (idParts.length === 0) idParts.push('<span style="color:var(--gray);">' + t('conn.noPlatformIds') + '</span>');
     h += '    <div class="conn-item-ids">' + idParts.join(' &nbsp; ') + '</div>';
     h += '  </div>';
+    // Edit button
+    h += '  <button class="conn-edit-btn" onclick="showClientWizardModal(\'' + id + '\')" title="' + escAttr(t('clients.editTip')) + '">✏️</button>';
     // Visibility 3-way toggle
     h += '  <div class="conn-vis-toggle">';
     h += '    <button class="conn-vis-btn vis-active' + (vis === 'active' ? ' active' : '') + '" onclick="setAccountVisAndRefresh(\'' + id + '\',\'active\')" title="' + escAttr(t('conn.vis.activeTip')) + '">✓ ' + t('conn.vis.active') + '</button>';
@@ -12108,6 +12168,199 @@ function addDiscoveredAccount(platform, externalId, name, currency, mcc) {
 
   if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('conn.added', name || externalId));
   buildConnectSection();
+}
+
+// ── Client Wizard Modal (Nuevo / Editar) ────────────────────────
+// editingId: null = nuevo cliente, '<userId>' = edición
+function showClientWizardModal(editingId) {
+  var m = document.getElementById('client-wizard-modal');
+  if (!m) return;
+
+  var isEdit = !!editingId;
+  var existing = isEdit ? USERS[editingId] : null;
+  var cache = loadDiscoveryCache();
+  var metaList   = (cache.meta   || []).slice();
+  var googleList = (cache.google || []).slice();
+
+  // Sort alphabetically
+  metaList.sort(function(a,b) { return (a.name||a.id).localeCompare(b.name||b.id); });
+  googleList.sort(function(a,b) { return (a.name||a.id).localeCompare(b.name||b.id); });
+
+  // Determine which accounts are already assigned to OTHER clients
+  var occupiedMeta   = {};
+  var occupiedGoogle = {};
+  Object.keys(USERS).forEach(function(uid) {
+    if (uid === editingId) return; // ignore self when editing
+    var u = USERS[uid];
+    if (u.metaAccId) occupiedMeta[u.metaAccId] = u.clientName || uid;
+    if (u.googleId)  occupiedGoogle[u.googleId.replace(/-/g, '')] = u.clientName || uid;
+  });
+
+  var html = '';
+  html += '<button class="budget-modal-close" onclick="hideClientWizardModal()">✕</button>';
+  html += '<div class="invite-modal-title">' + (isEdit ? t('clients.wiz.editTitle') : t('clients.wiz.newTitle')) + '</div>';
+
+  // Hint about empty discovery cache
+  if (metaList.length === 0 && googleList.length === 0) {
+    html += '<div style="background:rgba(255,140,66,0.10);border:1px solid rgba(255,140,66,0.3);color:#FF8C42;font-size:11.5px;padding:10px 14px;border-radius:8px;margin-bottom:14px;">⚠ ' + t('clients.wiz.runDiscoveryFirst') + '</div>';
+  }
+
+  // Name
+  html += '<div class="invite-field">';
+  html += '  <label>' + t('clients.wiz.name') + '</label>';
+  html += '  <input type="text" id="cw-name" placeholder="' + escAttr(t('clients.wiz.namePh')) + '" value="' + escAttr(existing ? (existing.clientName || '') : '') + '" />';
+  html += '</div>';
+
+  // Meta select
+  html += '<div class="invite-field" style="margin-top:14px;">';
+  html += '  <label>🅼 ' + t('clients.wiz.metaAccount') + '</label>';
+  html += '  <select id="cw-meta" class="cw-select">';
+  html += '    <option value="">— ' + t('clients.wiz.noPlatform') + ' —</option>';
+  metaList.forEach(function(a) {
+    var occupiedBy = occupiedMeta[a.id];
+    var selAttr = (existing && existing.metaAccId === a.id) ? ' selected' : '';
+    var disAttr = occupiedBy ? ' disabled' : '';
+    var label = (a.name || a.id) + ' · ' + a.id + (occupiedBy ? ' (ya en ' + occupiedBy + ')' : '');
+    html += '    <option value="' + escAttr(a.id) + '"' + selAttr + disAttr + '>' + escHtml(label) + '</option>';
+  });
+  // If editing and current metaAccId is not in discovery cache, still show it
+  if (existing && existing.metaAccId && !metaList.find(function(a) { return a.id === existing.metaAccId; })) {
+    html += '    <option value="' + escAttr(existing.metaAccId) + '" selected>' + escHtml(existing.metaAccId + ' (sin descubrir)') + '</option>';
+  }
+  html += '  </select>';
+  html += '</div>';
+
+  // Google select
+  html += '<div class="invite-field" style="margin-top:14px;">';
+  html += '  <label>🅖 ' + t('clients.wiz.googleAccount') + '</label>';
+  html += '  <select id="cw-google" class="cw-select">';
+  html += '    <option value="">— ' + t('clients.wiz.noPlatform') + ' —</option>';
+  googleList.forEach(function(a) {
+    var key = (a.id || '').replace(/-/g, '');
+    var occupiedBy = occupiedGoogle[key];
+    var selAttr = (existing && existing.googleId && existing.googleId.replace(/-/g, '') === key) ? ' selected' : '';
+    var disAttr = occupiedBy ? ' disabled' : '';
+    var via = a.via ? (' [' + a.via + ']') : '';
+    var label = (a.name || a.id) + ' · ' + a.id + via + (occupiedBy ? ' (ya en ' + occupiedBy + ')' : '');
+    html += '    <option value="' + escAttr(a.id) + '"' + selAttr + disAttr + '>' + escHtml(label) + '</option>';
+  });
+  if (existing && existing.googleId && !googleList.find(function(a) { return a.id && a.id.replace(/-/g, '') === existing.googleId.replace(/-/g, ''); })) {
+    html += '    <option value="' + escAttr(existing.googleId) + '" selected>' + escHtml(existing.googleId + ' (sin descubrir)') + '</option>';
+  }
+  html += '  </select>';
+  html += '</div>';
+
+  // Actions
+  html += '<div class="invite-modal-actions" style="margin-top:18px;">';
+  html += '  <button class="invite-btn-cancel" onclick="hideClientWizardModal()">' + t('invite.cancel') + '</button>';
+  if (isEdit) {
+    html += '  <button class="invite-btn-delete" onclick="deleteClientFromWizard(\'' + editingId + '\')" style="margin-right:auto;">🗑 ' + t('clients.wiz.delete') + '</button>';
+  }
+  html += '  <button class="invite-btn-create" onclick="saveClientFromWizard(' + (isEdit ? "'" + editingId + "'" : 'null') + ')">' + (isEdit ? t('clients.wiz.save') : t('clients.wiz.create')) + '</button>';
+  html += '</div>';
+
+  m.querySelector('.invite-modal-wrap').innerHTML = html;
+  m.classList.add('visible');
+}
+
+function hideClientWizardModal() {
+  var m = document.getElementById('client-wizard-modal');
+  if (m) m.classList.remove('visible');
+}
+
+function saveClientFromWizard(editingId) {
+  var nameEl   = document.getElementById('cw-name');
+  var metaEl   = document.getElementById('cw-meta');
+  var googleEl = document.getElementById('cw-google');
+  var name   = (nameEl   && nameEl.value   || '').trim();
+  var metaId = (metaEl   && metaEl.value   || '').trim();
+  var gId    = (googleEl && googleEl.value || '').trim();
+
+  if (!name) {
+    if (typeof adminShowToast === 'function') adminShowToast('⚠ ' + t('clients.wiz.errNameRequired'));
+    return;
+  }
+  if (!metaId && !gId) {
+    if (typeof adminShowToast === 'function') adminShowToast('⚠ ' + t('clients.wiz.errPlatformRequired'));
+    return;
+  }
+
+  // Derivar currency desde el cache (preferir Meta si está disponible)
+  var cache = loadDiscoveryCache();
+  var currency = 'ARS';
+  if (metaId) {
+    var foundM = (cache.meta || []).find(function(a) { return a.id === metaId; });
+    if (foundM && foundM.currency) currency = foundM.currency;
+  } else if (gId) {
+    var foundG = (cache.google || []).find(function(a) { return a.id === gId; });
+    if (foundG && foundG.currency) currency = foundG.currency;
+  }
+
+  if (editingId) {
+    // Update existing
+    var extras = loadExtraAccounts();
+    var existing = USERS[editingId] || {};
+    var updated = Object.assign({}, existing, {
+      clientName: name,
+      logo:       name.substring(0, 2).toUpperCase(),
+      metaAccId:  metaId || null,
+      googleId:   gId    || null,
+      currency:   currency
+    });
+    USERS[editingId] = updated;
+    extras[editingId] = {
+      clientName: name,
+      logo:       updated.logo,
+      platforms:  updated.platforms || ['ig'],
+      handles:    updated.handles   || {},
+      metaAccId:  updated.metaAccId,
+      googleId:   updated.googleId,
+      currency:   updated.currency
+    };
+    saveExtraAccounts(extras);
+    if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('clients.wiz.updated', name));
+  } else {
+    // Create new
+    var base = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 14) || 'client';
+    var userId = base;
+    var i = 1;
+    while (USERS[userId]) { userId = base + i; i++; }
+    var entry = {
+      clientName: name,
+      logo:       name.substring(0, 2).toUpperCase(),
+      platforms:  ['ig'],
+      handles:    {},
+      metaAccId:  metaId || null,
+      googleId:   gId    || null,
+      currency:   currency
+    };
+    var extras2 = loadExtraAccounts();
+    extras2[userId] = entry;
+    saveExtraAccounts(extras2);
+    USERS[userId] = Object.assign({
+      password: 'temp' + Math.random().toString(36).slice(2, 6),
+      _extra: true
+    }, entry);
+    if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('clients.wiz.created', name));
+  }
+
+  hideClientWizardModal();
+  buildConnectSection();
+}
+
+function deleteClientFromWizard(userId) {
+  if (!confirm(t('clients.wiz.confirmDelete'))) return;
+  var extras = loadExtraAccounts();
+  delete extras[userId];
+  saveExtraAccounts(extras);
+  delete USERS[userId];
+  // Also clear visibility setting
+  var vis = loadVisibilityMap();
+  delete vis[userId];
+  saveVisibilityMap(vis);
+  hideClientWizardModal();
+  buildConnectSection();
+  if (typeof adminShowToast === 'function') adminShowToast('✓ ' + t('clients.wiz.deleted'));
 }
 
 // ── Invite member modal ─────────────────────────────────────────
@@ -13692,6 +13945,31 @@ var TRANSLATIONS = {
   'conn.googleHidden':           { es: 'Oculta en Google', en: 'Hidden in Google', pt: 'Oculta no Google', de: 'In Google ausgeblendet', zh: 'Google 中隐藏' },
   'conn.clearResults':           { es: 'Borrar resultados', en: 'Clear results', pt: 'Limpar resultados', de: 'Ergebnisse löschen', zh: '清除结果' },
 
+  // Clientes — unified section + wizard
+  'nav.clients':                 { es: '📋 Clientes', en: '📋 Clients', pt: '📋 Clientes', de: '📋 Kunden', zh: '📋 客户' },
+  'clients.tab.accounts':        { es: 'Cuentas', en: 'Accounts', pt: 'Contas', de: 'Konten', zh: '账户' },
+  'clients.tab.config':          { es: 'Configuración', en: 'Configuration', pt: 'Configuração', de: 'Konfiguration', zh: '配置' },
+  'clients.newClient':           { es: 'Nuevo Cliente', en: 'New Client', pt: 'Novo Cliente', de: 'Neuer Kunde', zh: '新客户' },
+  'clients.newClientHint':       { es: 'Crea un cliente y vinculá sus cuentas Meta y Google en un solo paso.', en: 'Create a client and link both Meta and Google accounts in one step.', pt: 'Crie um cliente e vincule contas Meta e Google em uma etapa.', de: 'Erstellen Sie einen Kunden und verknüpfen Sie Meta + Google in einem Schritt.', zh: '一步创建客户并关联 Meta 和 Google 账户。' },
+  'clients.editTip':             { es: 'Editar cliente', en: 'Edit client', pt: 'Editar cliente', de: 'Kunde bearbeiten', zh: '编辑客户' },
+  'clients.wiz.newTitle':        { es: '➕ Nuevo Cliente', en: '➕ New Client', pt: '➕ Novo Cliente', de: '➕ Neuer Kunde', zh: '➕ 新客户' },
+  'clients.wiz.editTitle':       { es: '✏️ Editar Cliente', en: '✏️ Edit Client', pt: '✏️ Editar Cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
+  'clients.wiz.name':            { es: 'Nombre del cliente', en: 'Client name', pt: 'Nome do cliente', de: 'Kundenname', zh: '客户名称' },
+  'clients.wiz.namePh':          { es: 'Ej: Kohan Atelier', en: 'E.g.: Kohan Atelier', pt: 'Ex: Kohan Atelier', de: 'Z.B.: Kohan Atelier', zh: '例如: Kohan Atelier' },
+  'clients.wiz.metaAccount':     { es: 'Cuenta Meta', en: 'Meta account', pt: 'Conta Meta', de: 'Meta-Konto', zh: 'Meta 账户' },
+  'clients.wiz.googleAccount':   { es: 'Cuenta Google', en: 'Google account', pt: 'Conta Google', de: 'Google-Konto', zh: 'Google 账户' },
+  'clients.wiz.noPlatform':      { es: 'Sin vincular', en: 'Not linked', pt: 'Não vinculada', de: 'Nicht verknüpft', zh: '未关联' },
+  'clients.wiz.runDiscoveryFirst':{ es: 'No hay cuentas descubiertas todavía. Andá a Descubrir Meta o Descubrir Google y corré la búsqueda primero.', en: 'No discovered accounts yet. Go to Discover Meta or Discover Google and run discovery first.', pt: 'Nenhuma conta descoberta. Vá a Descobrir Meta ou Descobrir Google primeiro.', de: 'Noch keine Konten entdeckt. Bitte zuerst Discovery starten.', zh: '尚未发现账户。请先运行发现。' },
+  'clients.wiz.create':          { es: 'Crear cliente', en: 'Create client', pt: 'Criar cliente', de: 'Kunde anlegen', zh: '创建客户' },
+  'clients.wiz.save':            { es: 'Guardar cambios', en: 'Save changes', pt: 'Salvar alterações', de: 'Änderungen speichern', zh: '保存更改' },
+  'clients.wiz.delete':          { es: 'Eliminar cliente', en: 'Delete client', pt: 'Excluir cliente', de: 'Kunde löschen', zh: '删除客户' },
+  'clients.wiz.confirmDelete':   { es: '¿Eliminar este cliente y desvincular sus cuentas? Esta acción no borra las cuentas en Meta/Google.', en: 'Delete this client and unlink its accounts? This does not delete accounts in Meta/Google.', pt: 'Excluir este cliente e desvincular suas contas?', de: 'Diesen Kunden löschen und Konten entkoppeln?', zh: '删除此客户并解除其账户关联？' },
+  'clients.wiz.created':         { es: 'Cliente "{0}" creado', en: 'Client "{0}" created', pt: 'Cliente "{0}" criado', de: 'Kunde "{0}" angelegt', zh: '已创建客户 "{0}"' },
+  'clients.wiz.updated':         { es: 'Cliente "{0}" actualizado', en: 'Client "{0}" updated', pt: 'Cliente "{0}" atualizado', de: 'Kunde "{0}" aktualisiert', zh: '已更新客户 "{0}"' },
+  'clients.wiz.deleted':         { es: 'Cliente eliminado', en: 'Client deleted', pt: 'Cliente excluído', de: 'Kunde gelöscht', zh: '客户已删除' },
+  'clients.wiz.errNameRequired': { es: 'El nombre del cliente es obligatorio', en: 'Client name is required', pt: 'Nome do cliente é obrigatório', de: 'Kundenname ist erforderlich', zh: '客户名称为必填项' },
+  'clients.wiz.errPlatformRequired': { es: 'Tenés que vincular al menos una plataforma (Meta o Google)', en: 'You must link at least one platform (Meta or Google)', pt: 'Vincule ao menos uma plataforma', de: 'Mindestens eine Plattform verknüpfen', zh: '至少需要关联一个平台' },
+
   // Filter por responsable
   'filter.byOwner':         { es: 'Por responsable', en: 'By owner', pt: 'Por responsável', de: 'Nach Verantwortlichem', zh: '按负责人' },
   'filter.allOwners':       { es: 'Todos los responsables', en: 'All owners', pt: 'Todos os responsáveis', de: 'Alle Verantwortlichen', zh: '所有负责人' },
@@ -14858,11 +15136,33 @@ function applyDatePickerChanges() {
   commitDatePickerAndFetch();
 }
 
+// "Clientes" combina 2 sub-secciones internamente. Recordamos cuál fue la última visitada.
+var clientsLastSubsection = localStorage.getItem('actual_clients_last_subsec') || 'connect';
+function enterClientsSection() {
+  // Managers no manejan la pestaña "Cuentas" (descubrimiento/wizard) — solo "Configuración".
+  if (typeof isManager === 'function' && isManager()) {
+    switchAdminSection('cuentas');
+    return;
+  }
+  switchAdminSection(clientsLastSubsection);
+}
+
 function switchAdminSection(section) {
+  // Track last "Clientes" subsection for next entry
+  if (section === 'connect' || section === 'cuentas') {
+    clientsLastSubsection = section;
+    try { localStorage.setItem('actual_clients_last_subsec', section); } catch(e) {}
+  }
+
   // Nav buttons
   document.querySelectorAll('.admin-nav-btn').forEach(function(b) { b.classList.remove('active'); });
   var navBtn = document.getElementById('admin-nav-' + section);
   if (navBtn) navBtn.classList.add('active');
+  // Si vamos a connect/cuentas, marcar el unificado "Clientes" como activo
+  if (section === 'connect' || section === 'cuentas') {
+    var clientsBtn = document.getElementById('admin-nav-clients');
+    if (clientsBtn) clientsBtn.classList.add('active');
+  }
 
   // Sections
   document.querySelectorAll('.agency-section').forEach(function(s) { s.classList.remove('active'); });
@@ -16083,6 +16383,11 @@ function buildOptimizations(meta, risk) {
 
 <!-- Invite member modal -->
 <div id="invite-member-modal" class="budget-modal-overlay" onclick="if(event.target===this)hideInviteMemberModal()">
+  <div class="invite-modal-wrap" onclick="event.stopPropagation()"></div>
+</div>
+
+<!-- Client wizard modal (Nuevo Cliente / Editar Cliente) -->
+<div id="client-wizard-modal" class="budget-modal-overlay" onclick="if(event.target===this)hideClientWizardModal()">
   <div class="invite-modal-wrap" onclick="event.stopPropagation()"></div>
 </div>
 
