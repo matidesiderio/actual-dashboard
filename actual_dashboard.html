@@ -11773,7 +11773,19 @@ var connSearch = '';
 var connDiscovering = { meta: false, google: false };
 
 function setConnTab(tab) { connTab = tab; buildConnectSection(); }
-function setConnSearch(v) { connSearch = (v || '').trim().toLowerCase(); buildConnectSection(); }
+function setConnSearch(v) {
+  connSearch = (v || '').trim().toLowerCase();
+  buildConnectSection();
+  // Restore focus on the input (re-render destroys it) and put cursor at end
+  requestAnimationFrame(function() {
+    var inp = document.getElementById('conn-search-input');
+    if (inp) {
+      inp.focus();
+      var len = inp.value.length;
+      try { inp.setSelectionRange(len, len); } catch(e) {}
+    }
+  });
+}
 
 function buildConnectSection() {
   var el = document.getElementById('admin-section-connect');
@@ -11822,12 +11834,13 @@ function renderConnManagedTab() {
   var ids = allIds.slice();
   var search = connSearch;
   if (search) {
+    // Match: nombre/id que EMPIECE con el query, o IDs de plataforma exactos al inicio
     ids = ids.filter(function(id) {
       var u = USERS[id];
       var nm = (u.clientName || id).toLowerCase();
-      return nm.indexOf(search) !== -1 || id.toLowerCase().indexOf(search) !== -1
-        || (u.metaAccId || '').toLowerCase().indexOf(search) !== -1
-        || (u.googleId  || '').toLowerCase().indexOf(search) !== -1;
+      return nm.indexOf(search) === 0 || id.toLowerCase().indexOf(search) === 0
+        || (u.metaAccId || '').toLowerCase().indexOf(search) === 0
+        || (u.googleId  || '').toLowerCase().indexOf(search) === 0;
     });
   }
   ids.sort(function(a, b) {
@@ -11925,7 +11938,7 @@ function connBulkSetAll(status) {
     ids = ids.filter(function(id) {
       var u = USERS[id];
       var nm = (u.clientName || id).toLowerCase();
-      return nm.indexOf(search) !== -1 || id.toLowerCase().indexOf(search) !== -1;
+      return nm.indexOf(search) === 0 || id.toLowerCase().indexOf(search) === 0;
     });
   }
   var m = loadVisibilityMap();
@@ -11971,7 +11984,7 @@ function renderConnDiscoveryTab(platform) {
       var nm = (a.name || '').toLowerCase();
       var id = (a.id || '').toLowerCase();
       var via = (a.via || '').toLowerCase();
-      return nm.indexOf(connSearch) !== -1 || id.indexOf(connSearch) !== -1 || via.indexOf(connSearch) !== -1;
+      return nm.indexOf(connSearch) === 0 || id.indexOf(connSearch) === 0 || via.indexOf(connSearch) === 0;
     });
   }
 
