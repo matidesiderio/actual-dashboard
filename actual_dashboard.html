@@ -11037,7 +11037,7 @@ function showAccountStatusModal() {
     var logo = (cfg.logo || name).substring(0, 2).toUpperCase();
     var color= cfg.color || 'var(--lime)';
 
-    var hasImps      = d.meta && d.meta.impressions > 0;
+    var hasImps      = (d.meta && d.meta.impressions > 0) || (d.google && d.google.impressions > 0);
     var recentFetch  = d.fetchedAt && (now - d.fetchedAt) < THREE_HRS;
     var isActive     = hasImps && recentFetch && !d.error;
 
@@ -13820,6 +13820,7 @@ var TRANSLATIONS = {
   'card.investment':        { es: 'Inversión', en: 'Spend', pt: 'Investimento', de: 'Ausgaben', zh: '支出' },
   'card.impressions':       { es: 'Impresiones', en: 'Impressions', pt: 'Impressões', de: 'Impressionen', zh: '展示' },
   'card.clicks':            { es: 'Clicks', en: 'Clicks', pt: 'Cliques', de: 'Klicks', zh: '点击' },
+  'card.conversions':       { es: 'Conversiones', en: 'Conversions', pt: 'Conversões', de: 'Conversions', zh: '转化' },
   'card.viewReport':        { es: 'VER REPORTE', en: 'VIEW REPORT', pt: 'VER RELATÓRIO', de: 'BERICHT ANSEHEN', zh: '查看报告' },
   'card.noActivity':        { es: 'Sin actividad', en: 'No activity', pt: 'Sem atividade', de: 'Keine Aktivität', zh: '无活动' },
   'card.notConfigured':     { es: 'No configurado', en: 'Not configured', pt: 'Não configurado', de: 'Nicht konfiguriert', zh: '未配置' },
@@ -15610,19 +15611,115 @@ async function fetchAgencyClientData(userId) {
     agencyState.data[userId] = { loading: false, meta: null, prev: null, monthMeta: null, fetchedAt: Date.now(), error: e.message };
   }
 
-  // ── Google prepaid balance (no bloquea el resultado de Meta) ──
+  // ── Google Ads daily metrics + prepaid balance ──
   if (cfg.googleId) {
+    try {
+      // 1) Daily metrics (período actual + período previo, en paralelo)
+      var drG     = agencyState.dateRange;
+      var prevDrG = getCompareRange(drG.since, drG.until);
+      var gResults = await Promise.allSettled([
+        fetchGoogleAdsMetrics(cfg.googleId, drG, userId),
+        prevDrG ? fetchGoogleAdsMetrics(cfg.googleId, prevDrG, userId) : Promise.resolve(null),
+      ]);
+      var currG = gResults[0].status === 'fulfilled' ? gResults[0].value : null;
+      var prevG = gResults[1].status === 'fulfilled' ? gResults[1].value : null;
+      agencyState.data[userId].google = currG;
+      if (prevG) {
+        if (!agencyState.data[userId].prev) agencyState.data[userId].prev = {};
+        agencyState.data[userId].prev.google = prevG;
+      }
+    } catch(ge) {
+      agencyState.data[userId].google = null;
+    }
+
+    // 2) Saldo prepago (separado — no bloquea daily metrics)
     try {
       var mccId   = getMccForClient(userId);
       var gBal    = await fetchGooglePrepaidBalance(cfg.googleId, mccId);
       agencyState.data[userId].googleBalance = gBal;
     } catch(ge) {
-      agencyState.data[userId].googleBalance = null; // CORS u otro error → ignorar silenciosamente
+      agencyState.data[userId].googleBalance = null;
     }
   }
 
   agencyState.data[userId].risk = computeRiskScore(userId, agencyState.data[userId]);
   updateAgencyCard(userId, agencyState.data[userId], false);
+}
+
+// Fetch Google Ads daily metrics aggregated for a date range.
+// Tries each configured MCC until one works. Returns null if all fail.
+async function fetchGoogleAdsMetrics(googleId, dr, userId) {
+  var cleanId = (googleId || '').replace(/-/g, '');
+  if (!cleanId) return null;
+
+  var mccs = AGENCY_CONFIG.google.mcc || {};
+  var mccOrder = [];
+  // Prefer the MCC associated with this client (legacy hardcode)
+  if (userId) {
+    var preferredMcc = getMccForClient(userId);
+    if (preferredMcc) mccOrder.push(preferredMcc);
+  }
+  // Add the rest as fallback
+  Object.keys(mccs).forEach(function(k) {
+    var v = mccs[k];
+    if (v && mccOrder.indexOf(v) === -1) mccOrder.push(v);
+  });
+
+  var query =
+    "SELECT campaign.id, campaign.name, " +
+    "metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions " +
+    "FROM campaign " +
+    "WHERE segments.date BETWEEN '" + dr.since + "' AND '" + dr.until + "'";
+
+  for (var i = 0; i < mccOrder.length; i++) {
+    var mccId = mccOrder[i];
+    try {
+      var headers = USE_PROXY ? {
+        'Content-Type':        'application/json',
+        'x-login-customer-id': mccId
+      } : {
+        'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
+        'developer-token':  AGENCY_CONFIG.google.developerToken,
+        'login-customer-id': mccId,
+        'Content-Type':     'application/json'
+      };
+      var res = await fetch(GOOGLEADS_BASE + 'customers/' + cleanId + '/googleAds:search', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ query: query, pageSize: 5000 })
+      });
+      var data = await res.json();
+      if (data.error) {
+        // Si es PERMISSION_DENIED / NOT_FOUND probamos el siguiente MCC
+        var msg = (data.error.message || '').toLowerCase();
+        if (msg.indexOf('permission') !== -1 || msg.indexOf('not found') !== -1 || msg.indexOf('access') !== -1) continue;
+        throw new Error(data.error.message);
+      }
+      var rows = data.results || [];
+      var totSpend = 0, totImps = 0, totClicks = 0, totConv = 0, campaigns = 0;
+      rows.forEach(function(r) {
+        var m = r.metrics || {};
+        var costMicros = parseFloat(m.costMicros || 0);
+        if (!costMicros) return;
+        totSpend  += costMicros / 1e6;
+        totImps   += parseInt(m.impressions || 0);
+        totClicks += parseInt(m.clicks || 0);
+        totConv   += parseFloat(m.conversions || 0);
+        campaigns++;
+      });
+      var avgCtr = totImps > 0 ? (totClicks / totImps * 100) : 0;
+      var cpm    = totImps > 0 ? totSpend / totImps * 1000 : 0;
+      var cpc    = totClicks > 0 ? totSpend / totClicks : 0;
+      return {
+        spend: totSpend, impressions: totImps, clicks: totClicks, conversions: totConv,
+        ctr: avgCtr, cpm: cpm, cpc: cpc,
+        campaigns: campaigns, hasData: totSpend > 0
+      };
+    } catch (e) {
+      console.warn('Google Ads metrics MCC ' + mccId + ' failed:', e.message);
+    }
+  }
+  return null;
 }
 
 function scoreToRisk(score, reasons) {
@@ -15954,9 +16051,28 @@ function buildClientCardHtml(userId, cfg, data) {
   html += '</div>';
 
   // Google column
+  var google = data && data.google ? data.google : null;
   html += '<div class="acc-platform-col">';
   html += '  <div class="acc-platform-label"><span style="color:#4285F4;">🔵</span> GOOGLE ADS</div>';
-  html += '  <div class="acc-card-no-data">' + t('card.comingSoon') + '</div>';
+  if (!cfg.googleId) {
+    html += '  <div class="acc-card-no-data">' + t('card.notConfigured') + '</div>';
+  } else if (!google || !google.hasData) {
+    html += '  <div class="acc-card-no-data">' + t('card.noActivity') + '</div>';
+  } else {
+    var prevG  = (data && data.prev && data.prev.google && data.prev.google.hasData) ? data.prev.google : null;
+    var showCmpG = prevG && (agencyState.compareMode !== 'none');
+    var ctrG = google.ctr || 0;
+    var ctrClsG = ctrG < 1 ? 'ctr-low' : ctrG < 2 ? 'ctr-medium' : 'ctr-good';
+    html += metricRowDelta(t('card.investment'),  '$' + fmt(google.spend),       showCmpG ? deltaPct(google.spend,       prevG.spend)       : null, 'neutral');
+    html += metricRowDelta(t('card.impressions'), fmt(google.impressions),       showCmpG ? deltaPct(google.impressions, prevG.impressions) : null, 'higherIsBetter');
+    html += metricRowDelta(t('card.clicks'),      fmt(google.clicks),            showCmpG ? deltaPct(google.clicks,      prevG.clicks)      : null, 'higherIsBetter');
+    html += metricRowDelta('CTR',                 ctrG.toFixed(2) + '%',         showCmpG ? deltaPct(ctrG,               prevG.ctr || 0)    : null, 'higherIsBetter', ctrClsG);
+    html += metricRowDelta('CPM',                 '$' + fmt(google.cpm),         showCmpG ? deltaPct(google.cpm,         prevG.cpm)         : null, 'lowerIsBetter');
+    html += metricRowDelta('CPC',                 '$' + fmt(google.cpc),         showCmpG ? deltaPct(google.cpc,         prevG.cpc)         : null, 'lowerIsBetter');
+    if (google.conversions > 0) {
+      html += metricRowDelta(t('card.conversions'), fmt(google.conversions),     showCmpG ? deltaPct(google.conversions, prevG.conversions) : null, 'higherIsBetter');
+    }
+  }
   html += '</div>';
 
   html += '</div>'; // end metrics
