@@ -15686,7 +15686,7 @@ async function fetchGoogleAdsMetrics(googleId, dr, userId) {
       var res = await fetch(GOOGLEADS_BASE + 'customers/' + cleanId + '/googleAds:search', {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ query: query, pageSize: 5000 })
+        body: JSON.stringify({ query: query })
       });
       var data = await res.json();
       if (data.error) {
