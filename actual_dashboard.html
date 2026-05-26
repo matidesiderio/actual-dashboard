@@ -3516,6 +3516,12 @@
       color: var(--gray); font-size: 12.5px;
       background: var(--surface-2); border-radius: 8px;
     }
+    .alerts-recipient-display {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 7px; padding: 9px 12px; font-size: 12.5px;
+      color: var(--text-2); font-family: 'JetBrains Mono', monospace;
+    }
+    .alerts-recipient-display.empty { color: #FF8C42; font-style: italic; font-family: 'Inter', sans-serif; }
     .conn-item:hover { border-color: var(--lime); }
     .conn-item.hidden   { opacity: 0.55; }
     .conn-item.archived { opacity: 0.4; }
@@ -9616,6 +9622,7 @@ function applyExtraAccountsToUSERS() {
       igBusinessId: e.igBusinessId || null,
       fbPageId:     e.fbPageId     || null,
       timezone:     e.timezone     || 'America/Argentina/Buenos_Aires',
+      contactEmail: e.contactEmail || '',
       _extra:       true,
     };
   });
@@ -9670,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-21-oauth-v9', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-21-bcc-v10', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12175,9 +12182,12 @@ function buildAlertsSection() {
     });
     h += '      </select>';
     h += '    </div>';
+    // Auto-fill destinatario admin con el email del OAuth si está conectado
+    var adminDefaultEmail = (conn && conn.email) ? conn.email : 'matiasdesiderio@gmail.com';
+    var adminRecipient = as.recipient || adminDefaultEmail;
     h += '    <div class="alerts-field" style="grid-column:span 2;">';
-    h += '      <label>' + t('alerts.adminSummary.recipient') + '</label>';
-    h += '      <input type="email" id="alerts-admin-summary-email" value="' + escAttr(as.recipient || 'matiasdesiderio@gmail.com') + '" onchange="updateAdminSummaryEmail(this.value)" placeholder="tu@email.com" />';
+    h += '      <label>' + t('alerts.adminSummary.recipient') + ' <span style="font-size:10.5px;color:var(--gray);font-weight:400;">(' + t('alerts.adminSummary.recipientHint') + ')</span></label>';
+    h += '      <input type="email" id="alerts-admin-summary-email" value="' + escAttr(adminRecipient) + '" onchange="updateAdminSummaryEmail(this.value)" placeholder="tu@email.com" />';
     h += '    </div>';
     h += '    <div class="alerts-field" style="grid-column:span 2;">';
     h += '      <label>🌐 ' + t('alerts.field.timezone') + '</label>';
@@ -12238,11 +12248,17 @@ function buildAlertsSection() {
       });
       h += '      </select>';
       h += '    </div>';
+      // El destinatario viene del wizard del cliente (contactEmail). Acá lo mostramos solo lectura.
+      var clientEmail = (u.contactEmail || pc.recipient || '').trim();
       h += '    <div class="alerts-field" style="flex:2;">';
-      h += '      <label>' + t('alerts.field.recipient') + '</label>';
-      h += '      <input type="email" placeholder="email@cliente.com" value="' + escAttr(pc.recipient || '') + '" oninput="updateClientRecipient(\'' + cid + '\', this.value)" />';
+      h += '      <label>' + t('alerts.field.recipient') + ' <a href="javascript:void(0)" onclick="showClientWizardModal(\'' + cid + '\')" style="font-size:10.5px;color:var(--lime);text-decoration:none;margin-left:6px;">✏️ ' + t('alerts.editInWizard') + '</a></label>';
+      if (clientEmail) {
+        h += '      <div class="alerts-recipient-display">' + escHtml(clientEmail) + '</div>';
+      } else {
+        h += '      <div class="alerts-recipient-display empty">' + t('alerts.noEmailSet') + '</div>';
+      }
       h += '    </div>';
-      h += '    <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')" title="' + escAttr(t('alerts.sendTest')) + '">📧</button>';
+      h += '    <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')" title="' + escAttr(t('alerts.sendTest')) + '"' + (clientEmail ? '' : ' disabled') + '>📧</button>';
       h += '  </div>';
       if (pc.enabled && nextSend) {
         h += '  <div class="alerts-next-send" style="margin-top:8px;">📅 ' + tf('alerts.nextSend', formatNextSendFriendly(nextSend, clientTz)) + '</div>';
@@ -12350,7 +12366,9 @@ function updateAdminSummaryTz(v) {
 }
 // Build the request body for Gmail send — usa el OAuth del usuario si lo tiene,
 // sino fallback a la cuenta preconfigurada del admin.
-function buildGmailSendBody(to, subject, html) {
+// alwaysBccSender: si true, siempre BCC al sender (útil para reportes de clientes).
+function buildGmailSendBody(to, subject, html, opts) {
+  opts = opts || {};
   var conn = getMyGmailConnection();
   var body = {
     to: to,
@@ -12364,6 +12382,13 @@ function buildGmailSendBody(to, subject, html) {
     body.from_email = conn.email;
   } else {
     body.mode = 'admin';
+  }
+  // BCC al sender para tener copia oculta — siempre que el destinatario NO sea ya el sender
+  if (opts.alwaysBccSender) {
+    var senderEmail = conn.email || 'matiasdesiderio@gmail.com';
+    if (senderEmail && senderEmail.toLowerCase() !== (to || '').toLowerCase()) {
+      body.bcc = senderEmail;
+    }
   }
   return body;
 }
@@ -12394,19 +12419,21 @@ async function sendAdminSummaryNow() {
 }
 
 async function sendClientReportNow(cid) {
+  var u = USERS[cid] || {};
+  // Priorizar contactEmail del wizard, fallback al recipient legacy de alerts
   var cfg = loadAlertsConfig();
   var pc = cfg.perClient[cid] || {};
-  var recipient = (pc.recipient || '').trim();
+  var recipient = ((u.contactEmail || pc.recipient) || '').trim();
   if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
   var conn = getMyGmailConnection();
   if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
 
   adminShowToast('📧 ' + t('alerts.sending'));
   try {
-    var u = USERS[cid] || {};
     var emailBody = buildClientReportHtml(cid);
     var subject = '📊 Reporte quincenal — ' + (u.clientName || cid);
-    var sendBody = buildGmailSendBody(recipient, subject, emailBody);
+    // Always BCC sender for client reports (vos te quedás con copia)
+    var sendBody = buildGmailSendBody(recipient, subject, emailBody, { alwaysBccSender: true });
     var res = await fetch(API_BASE + '/gmail/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -12414,7 +12441,8 @@ async function sendClientReportNow(cid) {
     });
     var data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-    adminShowToast('✅ ' + tf('alerts.sentTo', recipient));
+    var bccNote = sendBody.bcc ? ' (' + tf('alerts.bccTo', sendBody.bcc) + ')' : '';
+    adminShowToast('✅ ' + tf('alerts.sentTo', recipient) + bccNote);
   } catch(e) {
     adminShowToast('❌ ' + t('alerts.errors.sendFailed') + ': ' + (e.message || e));
   }
@@ -13387,6 +13415,7 @@ function showClientWizardModal(editingId) {
 
   // Name + Timezone (en grid de 2 columnas)
   var existingTz = (existing && existing.timezone) || 'America/Argentina/Buenos_Aires';
+  var existingEmail = (existing && existing.contactEmail) || '';
   html += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">';
   html += '  <div class="invite-field">';
   html += '    <label>' + t('clients.wiz.name') + '</label>';
@@ -13396,6 +13425,11 @@ function showClientWizardModal(editingId) {
   html += '    <label>🌐 ' + t('clients.wiz.timezone') + '</label>';
   html += '    <select id="cw-timezone" class="cw-select">' + renderTimezoneOptions(existingTz) + '</select>';
   html += '  </div>';
+  html += '</div>';
+  // Email de contacto del cliente (destinatario de reportes)
+  html += '<div class="invite-field" style="margin-top:14px;">';
+  html += '  <label>📧 ' + t('clients.wiz.contactEmail') + ' <span style="color:var(--gray);font-size:10.5px;font-weight:400;">(' + t('clients.wiz.contactEmailHint') + ')</span></label>';
+  html += '  <input type="email" id="cw-contact-email" placeholder="contacto@cliente.com" value="' + escAttr(existingEmail) + '" />';
   html += '</div>';
 
   // Meta select
@@ -13596,9 +13630,11 @@ function saveClientFromWizard(editingId) {
   var igBusinessId = (igBizEl && igBizEl.value || '').trim();
   var fbPageId     = (fbPgEl  && fbPgEl.value  || '').trim();
 
-  // Recolectar zona horaria
+  // Recolectar zona horaria + email contacto
   var tzEl = document.getElementById('cw-timezone');
   var timezone = (tzEl && tzEl.value || 'America/Argentina/Buenos_Aires').trim();
+  var emailEl = document.getElementById('cw-contact-email');
+  var contactEmail = (emailEl && emailEl.value || '').trim();
 
   if (editingId) {
     // Update existing
@@ -13616,7 +13652,8 @@ function saveClientFromWizard(editingId) {
       platforms:     platforms.length ? platforms : (existing.platforms || []),
       igBusinessId:  igBusinessId || null,
       fbPageId:      fbPageId     || null,
-      timezone:      timezone
+      timezone:      timezone,
+      contactEmail:  contactEmail
     });
     USERS[editingId] = updated;
     extras[editingId] = {
@@ -13631,7 +13668,8 @@ function saveClientFromWizard(editingId) {
       iaContext:     iaContext,
       igBusinessId:  updated.igBusinessId,
       fbPageId:      updated.fbPageId,
-      timezone:      timezone
+      timezone:      timezone,
+      contactEmail:  contactEmail
     };
     saveExtraAccounts(extras);
     if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('clients.wiz.updated', name));
@@ -13653,7 +13691,8 @@ function saveClientFromWizard(editingId) {
       iaContext:     iaContext,
       igBusinessId:  igBusinessId || null,
       fbPageId:      fbPageId     || null,
-      timezone:      timezone
+      timezone:      timezone,
+      contactEmail:  contactEmail
     };
     var extras2 = loadExtraAccounts();
     extras2[userId] = entry;
@@ -15351,6 +15390,12 @@ var TRANSLATIONS = {
   'alerts.myGmail.opening':      { es: 'Abriendo Google para autorizar…', en: 'Opening Google to authorize…', pt: 'Abrindo Google…', de: 'Öffne Google…', zh: '正在打开 Google…' },
   'alerts.myGmail.connectedSuccess': { es: 'Gmail conectado: {0}', en: 'Gmail connected: {0}', pt: 'Gmail conectado: {0}', de: 'Gmail verbunden: {0}', zh: 'Gmail 已连接: {0}' },
   'alerts.myGmail.connectFailed':{ es: 'No se pudo conectar Gmail', en: 'Could not connect Gmail', pt: 'Falha ao conectar Gmail', de: 'Gmail-Verbindung fehlgeschlagen', zh: '无法连接 Gmail' },
+  'alerts.adminSummary.recipientHint': { es: 'Auto-completa con tu Gmail conectado', en: 'Auto-fills with your connected Gmail', pt: 'Auto-preenche com seu Gmail', de: 'Auto-ausfüllen mit verbundenem Gmail', zh: '自动填充连接的 Gmail' },
+  'alerts.editInWizard':         { es: 'Editar en cliente', en: 'Edit in client', pt: 'Editar no cliente', de: 'Im Kunden bearbeiten', zh: '在客户中编辑' },
+  'alerts.noEmailSet':           { es: 'Sin email cargado — editá el cliente para agregarlo', en: 'No email set — edit client to add', pt: 'Sem email — edite o cliente', de: 'Keine E-Mail gesetzt', zh: '未设置邮箱' },
+  'alerts.bccTo':                { es: 'con copia a {0}', en: 'with copy to {0}', pt: 'com cópia para {0}', de: 'mit Kopie an {0}', zh: '抄送至 {0}' },
+  'clients.wiz.contactEmail':    { es: 'Email de contacto del cliente', en: 'Client contact email', pt: 'Email de contato', de: 'Kontakt-E-Mail des Kunden', zh: '客户联系邮箱' },
+  'clients.wiz.contactEmailHint':{ es: 'destinatario de los reportes automáticos', en: 'recipient for automatic reports', pt: 'destinatário dos relatórios', de: 'Empfänger der Berichte', zh: '自动报告的收件人' },
   'clients.wiz.timezone':        { es: 'Zona horaria', en: 'Timezone', pt: 'Fuso horário', de: 'Zeitzone', zh: '时区' },
   'report.editClient':           { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
 
