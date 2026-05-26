@@ -48,6 +48,12 @@ export default {
       if (path === '/gmail/send' || path === '/gmail/send/') {
         return await handleGmailSend(request, env, corsHdrs);
       }
+      if (path === '/gmail/oauth/start') {
+        return await handleGmailOAuthStart(request, env, url);
+      }
+      if (path === '/gmail/oauth/callback') {
+        return await handleGmailOAuthCallback(request, env, url);
+      }
       return json({ error: 'Unknown route', path }, 404, corsHdrs);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500, corsHdrs);
@@ -299,6 +305,138 @@ async function handleGmailSend(request, env, corsHdrs) {
   let respJson = {};
   try { respJson = JSON.parse(respText); } catch(e) {}
   return json({ ok: true, id: respJson.id, threadId: respJson.threadId }, 200, corsHdrs);
+}
+
+// ── Gmail OAuth flow (popup-based for in-app connection) ─────
+async function handleGmailOAuthStart(request, env, url) {
+  if (!env.GMAIL_CLIENT_ID) {
+    return new Response('GMAIL_CLIENT_ID secret not configured', { status: 500 });
+  }
+  const callbackUrl = `${url.origin}/gmail/oauth/callback`;
+  const params = new URLSearchParams({
+    client_id: env.GMAIL_CLIENT_ID,
+    redirect_uri: callbackUrl,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true'
+  });
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  return Response.redirect(authUrl, 302);
+}
+
+async function handleGmailOAuthCallback(request, env, url) {
+  const code  = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
+
+  function pageHtml(opts) {
+    const success = !!opts.success;
+    const email = opts.email || '';
+    const refreshToken = opts.refresh_token || '';
+    const errorMsg = opts.error || '';
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>${success ? 'Gmail conectado' : 'Error al conectar Gmail'}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0D0D0D; color: #F0F0F0; padding: 40px 24px; margin: 0; text-align: center; }
+  .ok { color: #10D879; }
+  .bad { color: #FF4D4D; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  p { color: #888; font-size: 13px; line-height: 1.5; }
+  .email { font-family: monospace; background: #161616; padding: 8px 14px; border-radius: 7px; display: inline-block; margin-top: 12px; }
+</style>
+</head>
+<body>
+  ${success ? `
+    <h1 class="ok">✓ Gmail conectado</h1>
+    <p>Cuenta:</p>
+    <p class="email">${email}</p>
+    <p style="margin-top:24px;">Esta ventana se cierra automáticamente.</p>
+  ` : `
+    <h1 class="bad">⚠ No se pudo conectar Gmail</h1>
+    <p>${errorMsg || 'Error desconocido'}</p>
+    <p style="margin-top:20px;">Podés cerrar esta ventana y volver a intentar.</p>
+  `}
+  <script>
+    (function() {
+      try {
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'gmail_oauth_result',
+            success: ${success ? 'true' : 'false'},
+            email: ${JSON.stringify(email)},
+            refresh_token: ${JSON.stringify(refreshToken)},
+            error: ${JSON.stringify(errorMsg)}
+          }, '*');
+        }
+      } catch(e) { console.error('postMessage error:', e); }
+      setTimeout(function() { try { window.close(); } catch(e) {} }, 2500);
+    })();
+  </script>
+</body>
+</html>`;
+  }
+
+  if (error) {
+    return new Response(pageHtml({ success: false, error: 'Google devolvió: ' + error }), {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  }
+  if (!code) {
+    return new Response(pageHtml({ success: false, error: 'Falta el código de autorización' }), {
+      status: 400,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  }
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+    return new Response(pageHtml({ success: false, error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' }), {
+      status: 500,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  }
+
+  // Exchange authorization code for tokens
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.GMAIL_CLIENT_ID,
+      client_secret: env.GMAIL_CLIENT_SECRET,
+      code: code,
+      redirect_uri: `${url.origin}/gmail/oauth/callback`,
+      grant_type: 'authorization_code'
+    }).toString()
+  });
+  const tokens = await tokenRes.json();
+  if (!tokens.refresh_token) {
+    return new Response(pageHtml({
+      success: false,
+      error: 'Google no devolvió refresh_token (puede que ya hayas autorizado antes — revoca el acceso en https://myaccount.google.com/permissions y volvé a intentar)'
+    }), { status: 400, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+  }
+
+  // Get user's email via userinfo endpoint
+  let userEmail = '';
+  try {
+    const uiRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: 'Bearer ' + tokens.access_token }
+    });
+    const ui = await uiRes.json();
+    userEmail = ui.email || '';
+  } catch(e) { /* ignore */ }
+
+  return new Response(pageHtml({
+    success: true,
+    email: userEmail,
+    refresh_token: tokens.refresh_token
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  });
 }
 
 // ── Anthropic API ──────────────────────────────────────────────
