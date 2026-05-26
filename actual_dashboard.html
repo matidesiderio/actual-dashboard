@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-21-bcc-v10', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-26-admin-oauth-v11', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12136,10 +12136,16 @@ function buildAlertsSection() {
     h += '      <div class="alerts-conn-email">' + escHtml(conn.email) + '</div>';
     h += '      <div class="alerts-conn-source">' + (conn.source === 'preconfigured' ? t('alerts.myGmail.preconfigured') : t('alerts.myGmail.userConnected')) + '</div>';
     h += '    </div>';
-    if (conn.source !== 'preconfigured') {
+    if (conn.source === 'preconfigured') {
+      // Admin usando token preconfigurado → ofrecer OAuth como alternativa "real"
+      h += '    <button class="alerts-conn-btn" onclick="connectMyGmail()">🔗 ' + t('alerts.myGmail.connectOAuth') + '</button>';
+    } else {
       h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGmail()">' + t('alerts.myGmail.disconnect') + '</button>';
     }
     h += '  </div>';
+    if (conn.source === 'preconfigured') {
+      h += '  <div class="alerts-hint" style="margin-top:10px;margin-bottom:0;">💡 ' + t('alerts.myGmail.preconfiguredHint') + '</div>';
+    }
   } else {
     h += '  <div class="alerts-conn-row">';
     h += '    <div class="alerts-conn-info">';
@@ -15390,6 +15396,8 @@ var TRANSLATIONS = {
   'alerts.myGmail.opening':      { es: 'Abriendo Google para autorizar…', en: 'Opening Google to authorize…', pt: 'Abrindo Google…', de: 'Öffne Google…', zh: '正在打开 Google…' },
   'alerts.myGmail.connectedSuccess': { es: 'Gmail conectado: {0}', en: 'Gmail connected: {0}', pt: 'Gmail conectado: {0}', de: 'Gmail verbunden: {0}', zh: 'Gmail 已连接: {0}' },
   'alerts.myGmail.connectFailed':{ es: 'No se pudo conectar Gmail', en: 'Could not connect Gmail', pt: 'Falha ao conectar Gmail', de: 'Gmail-Verbindung fehlgeschlagen', zh: '无法连接 Gmail' },
+  'alerts.myGmail.connectOAuth': { es: 'Conectar con OAuth', en: 'Connect with OAuth', pt: 'Conectar com OAuth', de: 'Mit OAuth verbinden', zh: '使用 OAuth 连接' },
+  'alerts.myGmail.preconfiguredHint': { es: 'Tu admin tiene Gmail preconfigurado en el Worker. Si querés probar el flow real de OAuth (recomendado antes de duplicar la app), tocá "Conectar con OAuth" arriba.', en: 'Admin has a preconfigured Gmail in the Worker. To test the real OAuth flow (recommended before duplicating the app), click "Connect with OAuth" above.', pt: 'O admin tem Gmail pré-configurado. Para testar o OAuth real, clique acima.', de: 'Admin hat vorkonfiguriertes Gmail. Für echten OAuth-Test oben klicken.', zh: '管理员已预配置 Gmail。要测试真实 OAuth 流程，请点击上方按钮。' },
   'alerts.adminSummary.recipientHint': { es: 'Auto-completa con tu Gmail conectado', en: 'Auto-fills with your connected Gmail', pt: 'Auto-preenche com seu Gmail', de: 'Auto-ausfüllen mit verbundenem Gmail', zh: '自动填充连接的 Gmail' },
   'alerts.editInWizard':         { es: 'Editar en cliente', en: 'Edit in client', pt: 'Editar no cliente', de: 'Im Kunden bearbeiten', zh: '在客户中编辑' },
   'alerts.noEmailSet':           { es: 'Sin email cargado — editá el cliente para agregarlo', en: 'No email set — edit client to add', pt: 'Sem email — edite o cliente', de: 'Keine E-Mail gesetzt', zh: '未设置邮箱' },
