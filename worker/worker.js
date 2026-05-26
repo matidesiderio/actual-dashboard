@@ -45,6 +45,9 @@ export default {
       if (path === '/anthropic' || path === '/anthropic/') {
         return await handleAnthropic(request, env, corsHdrs);
       }
+      if (path === '/gmail/send' || path === '/gmail/send/') {
+        return await handleGmailSend(request, env, corsHdrs);
+      }
       return json({ error: 'Unknown route', path }, 404, corsHdrs);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500, corsHdrs);
@@ -165,6 +168,137 @@ async function handleGoogleAds(request, env, url, corsHdrs) {
       ...corsHdrs,
     }
   });
+}
+
+// ── Gmail Send (admin pre-configured) ──────────────────────────
+// In-memory cache for Gmail access tokens per refresh_token
+let _gmailTokenCache = {};
+async function getGmailAccessToken(env, refreshToken, clientId, clientSecret) {
+  const key = refreshToken;
+  const cached = _gmailTokenCache[key];
+  if (cached && cached.expiry > Date.now()) return cached.token;
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:
+      'client_id=' + encodeURIComponent(clientId) +
+      '&client_secret=' + encodeURIComponent(clientSecret) +
+      '&refresh_token=' + encodeURIComponent(refreshToken) +
+      '&grant_type=refresh_token'
+  });
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error('Gmail OAuth refresh failed: ' + (data.error_description || data.error || 'unknown'));
+  }
+  _gmailTokenCache[key] = {
+    token: data.access_token,
+    expiry: Date.now() + ((data.expires_in || 3600) - 60) * 1000,
+  };
+  return data.access_token;
+}
+
+// Encode UTF-8 string to base64url (per RFC 4648 §5)
+function toBase64Url(str) {
+  // Encode as UTF-8 bytes, then base64, then convert to base64url
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function handleGmailSend(request, env, corsHdrs) {
+  if (request.method !== 'POST') {
+    return json({ error: 'POST only' }, 405, corsHdrs);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch(e) { return json({ error: 'Invalid JSON body' }, 400, corsHdrs); }
+
+  const { to, subject, html, text, cc, bcc, fromName, mode } = body;
+  if (!to || !subject || (!html && !text)) {
+    return json({ error: 'Missing fields: to, subject, html|text' }, 400, corsHdrs);
+  }
+
+  // Decide credentials:
+  // mode === 'admin' (default) → use pre-configured GMAIL_* secrets
+  // mode === 'user'             → use refresh_token from body (member's own Gmail)
+  let clientId, clientSecret, refreshToken, fromEmail;
+  if (mode === 'user') {
+    if (!body.refresh_token) return json({ error: 'Missing refresh_token for user mode' }, 400, corsHdrs);
+    if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+      return json({ error: 'GMAIL_CLIENT_ID/SECRET not configured in Worker' }, 500, corsHdrs);
+    }
+    clientId = env.GMAIL_CLIENT_ID;
+    clientSecret = env.GMAIL_CLIENT_SECRET;
+    refreshToken = body.refresh_token;
+    fromEmail = body.from_email || 'me';
+  } else {
+    if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+      return json({ error: 'GMAIL secrets not configured in Worker' }, 500, corsHdrs);
+    }
+    clientId = env.GMAIL_CLIENT_ID;
+    clientSecret = env.GMAIL_CLIENT_SECRET;
+    refreshToken = env.GMAIL_REFRESH_TOKEN;
+    fromEmail = 'matiasdesiderio@gmail.com';
+  }
+
+  let accessToken;
+  try { accessToken = await getGmailAccessToken(env, refreshToken, clientId, clientSecret); }
+  catch(e) { return json({ error: e.message }, 502, corsHdrs); }
+
+  // Build RFC 2822 MIME message
+  const fromHeader = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  let mime = '';
+  mime += `From: ${fromHeader}\r\n`;
+  mime += `To: ${to}\r\n`;
+  if (cc)  mime += `Cc: ${cc}\r\n`;
+  if (bcc) mime += `Bcc: ${bcc}\r\n`;
+  mime += `Subject: =?UTF-8?B?${toBase64Url(subject)}?=\r\n`;
+  mime += `MIME-Version: 1.0\r\n`;
+  if (html) {
+    mime += `Content-Type: text/html; charset="UTF-8"\r\n`;
+    mime += `Content-Transfer-Encoding: base64\r\n\r\n`;
+    mime += toBase64Url(html).replace(/-/g, '+').replace(/_/g, '/'); // standard b64 inside body
+    // Actually Gmail accepts the raw value as base64url overall. Let me keep it simple:
+  } else {
+    mime += `Content-Type: text/plain; charset="UTF-8"\r\n\r\n`;
+    mime += text;
+  }
+
+  // Reconstruct simpler MIME without inline b64 (Gmail API expects base64url of full RFC822):
+  let raw = '';
+  raw += `From: ${fromHeader}\r\n`;
+  raw += `To: ${to}\r\n`;
+  if (cc)  raw += `Cc: ${cc}\r\n`;
+  if (bcc) raw += `Bcc: ${bcc}\r\n`;
+  raw += `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=\r\n`;
+  raw += `MIME-Version: 1.0\r\n`;
+  if (html) {
+    raw += `Content-Type: text/html; charset="UTF-8"\r\n\r\n`;
+    raw += html;
+  } else {
+    raw += `Content-Type: text/plain; charset="UTF-8"\r\n\r\n`;
+    raw += text;
+  }
+  const encoded = toBase64Url(raw);
+
+  // Call Gmail API
+  const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw: encoded }),
+  });
+  const respText = await r.text();
+  if (!r.ok) {
+    return json({ error: 'Gmail send failed', status: r.status, body: respText }, r.status, corsHdrs);
+  }
+  let respJson = {};
+  try { respJson = JSON.parse(respText); } catch(e) {}
+  return json({ ok: true, id: respJson.id, threadId: respJson.threadId }, 200, corsHdrs);
 }
 
 // ── Anthropic API ──────────────────────────────────────────────

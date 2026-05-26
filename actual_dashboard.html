@@ -9670,7 +9670,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-21-alerts-tz-v7', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-21-gmail-v8', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12306,13 +12306,222 @@ function updateAdminSummaryTz(v) {
   saveAlertsConfig(cfg);
   buildAlertsSection();
 }
-function sendAdminSummaryNow() {
+async function sendAdminSummaryNow() {
   var cfg = loadAlertsConfig();
   var recipient = (cfg.adminSummary.recipient || '').trim();
   if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
   var conn = getMyGmailConnection();
   if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
-  adminShowToast('📧 ' + tf('alerts.testEnqueued', recipient) + ' (Fase 1B activa envío real)');
+
+  adminShowToast('📧 ' + t('alerts.sending'));
+  try {
+    var emailBody = buildAdminSummaryHtml();
+    var res = await fetch(API_BASE + '/gmail/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: recipient,
+        subject: '📊 Resumen quincenal — Actual Comunicaciones',
+        html: emailBody,
+        fromName: 'Actual Comunicaciones — Dashboard',
+        mode: 'admin'
+      })
+    });
+    var data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    adminShowToast('✅ ' + tf('alerts.sentTo', recipient));
+  } catch(e) {
+    adminShowToast('❌ ' + t('alerts.errors.sendFailed') + ': ' + (e.message || e));
+  }
+}
+
+async function sendClientReportNow(cid) {
+  var cfg = loadAlertsConfig();
+  var pc = cfg.perClient[cid] || {};
+  var recipient = (pc.recipient || '').trim();
+  if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
+  var conn = getMyGmailConnection();
+  if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
+
+  adminShowToast('📧 ' + t('alerts.sending'));
+  try {
+    var u = USERS[cid] || {};
+    var emailBody = buildClientReportHtml(cid);
+    var subject = '📊 Reporte quincenal — ' + (u.clientName || cid);
+    var res = await fetch(API_BASE + '/gmail/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: recipient,
+        subject: subject,
+        html: emailBody,
+        fromName: 'Actual Comunicaciones',
+        mode: 'admin'
+      })
+    });
+    var data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    adminShowToast('✅ ' + tf('alerts.sentTo', recipient));
+  } catch(e) {
+    adminShowToast('❌ ' + t('alerts.errors.sendFailed') + ': ' + (e.message || e));
+  }
+}
+
+// ── HTML email templates ────────────────────────────────────────
+function buildAdminSummaryHtml() {
+  // Resumen del admin: top cuentas en riesgo, ordenadas por score
+  var clients = [];
+  Object.keys(USERS).forEach(function(uid) {
+    if (USERS[uid].isAdmin) return;
+    if (getAccountVisibility(uid) !== 'active') return;
+    var d = (agencyState.data || {})[uid];
+    var risk = (d && d.risk) || { level: 'medium', score: 0, label: '—', reasons: [] };
+    clients.push({
+      uid: uid,
+      name: USERS[uid].clientName || uid,
+      score: risk.score || 0,
+      level: risk.level,
+      label: risk.label,
+      reasons: risk.reasons || [],
+      meta: d && d.meta,
+      google: d && d.google
+    });
+  });
+  clients.sort(function(a, b) { return b.score - a.score; });
+
+  var levelColors = { critical:'#FF4D4D', high:'#FF8C42', medium:'#FFD166', low:'#10D879' };
+  var dateStr = new Date().toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' });
+
+  var h = '';
+  h += '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;background:#0D0D0D;color:#F0F0F0;padding:32px 24px;">';
+  h += '<div style="text-align:center;margin-bottom:28px;">';
+  h += '  <h1 style="color:#A4FE73;font-size:22px;margin:0 0 8px;font-weight:700;letter-spacing:0.4px;">📊 Resumen quincenal</h1>';
+  h += '  <div style="color:#888;font-size:13px;">Actual Comunicaciones · ' + dateStr + '</div>';
+  h += '</div>';
+
+  // Summary stats
+  var critical = clients.filter(function(c) { return c.level === 'critical'; });
+  var high     = clients.filter(function(c) { return c.level === 'high'; });
+  h += '<div style="display:flex;gap:12px;margin-bottom:24px;justify-content:center;">';
+  h += '  <div style="background:#161616;border:1px solid #2a2a2a;border-radius:10px;padding:14px 18px;text-align:center;flex:1;max-width:160px;">';
+  h += '    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Críticas</div>';
+  h += '    <div style="font-size:26px;color:' + levelColors.critical + ';font-weight:700;">' + critical.length + '</div>';
+  h += '  </div>';
+  h += '  <div style="background:#161616;border:1px solid #2a2a2a;border-radius:10px;padding:14px 18px;text-align:center;flex:1;max-width:160px;">';
+  h += '    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Atención</div>';
+  h += '    <div style="font-size:26px;color:' + levelColors.high + ';font-weight:700;">' + high.length + '</div>';
+  h += '  </div>';
+  h += '  <div style="background:#161616;border:1px solid #2a2a2a;border-radius:10px;padding:14px 18px;text-align:center;flex:1;max-width:160px;">';
+  h += '    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Total</div>';
+  h += '    <div style="font-size:26px;color:#F0F0F0;font-weight:700;">' + clients.length + '</div>';
+  h += '  </div>';
+  h += '</div>';
+
+  // Top accounts to monitor
+  h += '<h2 style="color:#F0F0F0;font-size:15px;margin:24px 0 10px;font-weight:700;letter-spacing:0.3px;">🎯 Cuentas a monitorear (top 8 por score de crisis)</h2>';
+  if (clients.length === 0) {
+    h += '<div style="background:#161616;border:1px solid #2a2a2a;padding:20px;border-radius:10px;color:#888;text-align:center;">No hay cuentas activas configuradas.</div>';
+  } else {
+    clients.slice(0, 8).forEach(function(c) {
+      var color = levelColors[c.level] || '#888';
+      h += '<div style="background:#161616;border:1px solid #2a2a2a;border-left:4px solid ' + color + ';padding:14px 16px;border-radius:8px;margin-bottom:8px;">';
+      h += '  <div style="display:flex;justify-content:space-between;align-items:center;">';
+      h += '    <div style="font-size:14px;font-weight:700;color:#F0F0F0;">' + escHtml(c.name) + '</div>';
+      h += '    <div style="font-size:11px;color:' + color + ';font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">' + escHtml(c.label) + ' · ' + c.score + 'p</div>';
+      h += '  </div>';
+      if (c.reasons.length > 0) {
+        h += '  <div style="font-size:12px;color:#888;margin-top:6px;line-height:1.4;">';
+        c.reasons.slice(0, 2).forEach(function(r) {
+          h += '<div>· ' + escHtml(r) + '</div>';
+        });
+        h += '  </div>';
+      }
+      h += '</div>';
+    });
+  }
+
+  // Footer
+  h += '<div style="margin-top:32px;padding-top:20px;border-top:1px solid #2a2a2a;text-align:center;color:#666;font-size:11px;line-height:1.6;">';
+  h += '  Reporte generado automáticamente por <strong style="color:#A4FE73;">Actual Dashboard</strong><br/>';
+  h += '  <a href="https://matidesiderio.github.io/actual-dashboard/actual_dashboard.html" style="color:#888;text-decoration:none;">Ver dashboard completo →</a>';
+  h += '</div>';
+
+  h += '</div>';
+  return h;
+}
+
+function buildClientReportHtml(cid) {
+  var u = USERS[cid] || {};
+  var d = (agencyState.data || {})[cid] || {};
+  var risk = d.risk || { level: 'medium', label: '—', reasons: [] };
+  var meta = d.meta;
+  var google = d.google;
+
+  var levelColors = { critical:'#FF4D4D', high:'#FF8C42', medium:'#FFD166', low:'#10D879' };
+  var color = levelColors[risk.level] || '#888';
+  var dateStr = new Date().toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' });
+
+  function row(label, val) {
+    return '<tr><td style="padding:7px 12px;color:#888;font-size:12px;">' + label + '</td><td style="padding:7px 12px;color:#F0F0F0;font-size:13px;font-weight:600;text-align:right;">' + val + '</td></tr>';
+  }
+
+  var h = '';
+  h += '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;background:#0D0D0D;color:#F0F0F0;padding:32px 24px;">';
+  h += '<div style="text-align:center;margin-bottom:24px;">';
+  h += '  <h1 style="color:#A4FE73;font-size:22px;margin:0 0 6px;font-weight:700;">📊 ' + escHtml(u.clientName || cid) + '</h1>';
+  h += '  <div style="color:#888;font-size:13px;">Reporte quincenal · ' + dateStr + '</div>';
+  h += '  <div style="display:inline-block;background:' + color + '22;color:' + color + ';font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;margin-top:10px;text-transform:uppercase;letter-spacing:0.5px;">' + escHtml(risk.label) + '</div>';
+  h += '</div>';
+
+  // Risk reasons
+  if (risk.reasons && risk.reasons.length > 0) {
+    h += '<div style="background:#161616;border-left:4px solid ' + color + ';padding:12px 16px;border-radius:8px;margin-bottom:20px;">';
+    h += '  <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;font-weight:600;">Puntos a revisar</div>';
+    risk.reasons.slice(0, 3).forEach(function(r) {
+      h += '<div style="font-size:13px;color:#F0F0F0;margin:3px 0;">⚠ ' + escHtml(r) + '</div>';
+    });
+    h += '</div>';
+  }
+
+  // Meta column
+  if (meta && meta.hasData) {
+    h += '<h3 style="color:#F0F0F0;font-size:13px;margin:20px 0 8px;letter-spacing:0.4px;text-transform:uppercase;">⬛ Meta Ads</h3>';
+    h += '<table style="width:100%;background:#161616;border:1px solid #2a2a2a;border-radius:8px;border-collapse:separate;">';
+    h += row('Inversión', '$' + (meta.spend || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    h += row('Impresiones', (meta.impressions || 0).toLocaleString('es-AR'));
+    h += row('Clicks', (meta.clicks || 0).toLocaleString('es-AR'));
+    h += row('CTR', (meta.ctr || 0).toFixed(2) + '%');
+    h += row('CPM', '$' + (meta.cpm || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    h += row('CPC', '$' + (meta.cpc || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    h += '</table>';
+  }
+
+  // Google column
+  if (google && google.hasData) {
+    h += '<h3 style="color:#F0F0F0;font-size:13px;margin:20px 0 8px;letter-spacing:0.4px;text-transform:uppercase;">🔵 Google Ads</h3>';
+    h += '<table style="width:100%;background:#161616;border:1px solid #2a2a2a;border-radius:8px;border-collapse:separate;">';
+    h += row('Inversión', '$' + (google.spend || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    h += row('Impresiones', (google.impressions || 0).toLocaleString('es-AR'));
+    h += row('Clicks', (google.clicks || 0).toLocaleString('es-AR'));
+    h += row('CTR', (google.ctr || 0).toFixed(2) + '%');
+    h += row('CPM', '$' + (google.cpm || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    h += row('CPC', '$' + (google.cpc || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
+    if (google.conversions > 0) h += row('Conversiones', google.conversions.toFixed(1));
+    h += '</table>';
+  }
+
+  if ((!meta || !meta.hasData) && (!google || !google.hasData)) {
+    h += '<div style="background:#161616;border:1px solid #2a2a2a;padding:24px;border-radius:8px;color:#888;text-align:center;font-size:13px;">Sin actividad reciente en el período. Configurá tus campañas en Meta Ads o Google Ads.</div>';
+  }
+
+  // Footer
+  h += '<div style="margin-top:32px;padding-top:20px;border-top:1px solid #2a2a2a;text-align:center;color:#666;font-size:11px;line-height:1.6;">';
+  h += '  Reporte generado por <strong style="color:#A4FE73;">Actual Comunicaciones</strong><br/>';
+  h += '  Consultas: matiasdesiderio@gmail.com';
+  h += '</div>';
+
+  h += '</div>';
+  return h;
 }
 function _ensureClientPC(cfg, cid) {
   if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', frequency: 'biweekly', hour: 9, lastSentAt: null, nextSendAt: null };
@@ -15076,6 +15285,9 @@ var TRANSLATIONS = {
   'alerts.freq.biweekly':        { es: 'Lunes por medio (quincenal)', en: 'Every other Monday', pt: 'Cada duas segundas', de: 'Jeden zweiten Montag', zh: '每隔一周一' },
   'alerts.nextSend':             { es: 'Próximo envío: {0}', en: 'Next send: {0}', pt: 'Próximo envio: {0}', de: 'Nächster Versand: {0}', zh: '下次发送: {0}' },
   'alerts.sendTest':             { es: 'Enviar test ahora', en: 'Send test now', pt: 'Enviar teste agora', de: 'Test jetzt senden', zh: '立即发送测试' },
+  'alerts.sending':              { es: 'Enviando…', en: 'Sending…', pt: 'Enviando…', de: 'Sende…', zh: '发送中…' },
+  'alerts.sentTo':               { es: 'Enviado a {0}', en: 'Sent to {0}', pt: 'Enviado para {0}', de: 'Gesendet an {0}', zh: '已发送至 {0}' },
+  'alerts.errors.sendFailed':    { es: 'Error al enviar', en: 'Send failed', pt: 'Falha ao enviar', de: 'Senden fehlgeschlagen', zh: '发送失败' },
   'clients.wiz.timezone':        { es: 'Zona horaria', en: 'Timezone', pt: 'Fuso horário', de: 'Zeitzone', zh: '时区' },
   'report.editClient':           { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
 
