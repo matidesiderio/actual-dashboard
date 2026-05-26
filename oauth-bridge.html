@@ -36,10 +36,8 @@
         if (kv[0]) params[kv[0]] = decodeURIComponent(kv[1] || '');
       });
 
-      // Clear hash from history immediately (security: avoid keeping tokens in history)
-      try {
-        history.replaceState(null, '', window.location.pathname);
-      } catch(e) {}
+      // NO limpiamos el hash todavía — el dashboard lo va a leer por polling.
+      // El dashboard cierra esta ventana cuando termina.
 
       var success = params.success === '1' || params.success === 'true';
       var email = params.email || '';
@@ -54,7 +52,8 @@
         content.innerHTML = '<h1 class="bad">⚠ No se pudo conectar Gmail</h1><p>' + (errMsg || 'Error desconocido').replace(/[<>&"]/g, '') + '</p><p style="margin-top:20px;">Cerrá esta ventana e intentá de nuevo.</p>';
       }
 
-      // postMessage to opener — same origin now, so this WORKS
+      // Best-effort postMessage (window.opener suele ser null por COOP de Google,
+      // pero si por algún motivo está disponible, esto acelera la comunicación).
       try {
         if (window.opener) {
           window.opener.postMessage({
@@ -65,12 +64,13 @@
             error: errMsg
           }, window.location.origin);
         }
-      } catch(e) { console.error('postMessage error:', e); }
+      } catch(e) { /* opener no accesible — no problem, polling lo agarra */ }
 
-      // Close popup after 2.5s
+      // Auto-close de respaldo (por si el dashboard no responde) a 30s.
+      // El dashboard cierra esta ventana antes, normalmente.
       setTimeout(function() {
         try { window.close(); } catch(e) {}
-      }, 2500);
+      }, 30000);
     })();
   </script>
 </body>

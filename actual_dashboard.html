@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-26-oauth-bridge-v13', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-26-oauth-poll-v14', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12272,17 +12272,17 @@ function buildAlertsSection() {
 }
 
 // ── Action handlers — Gmail OAuth real ──────────────────────────
-var _gmailOAuthListenerActive = false;
 function connectMyGmail() {
-  // Abre popup hacia el Worker que redirige a Google. Cuando vuelva,
-  // el callback postMessages los tokens y los guardamos en localStorage.
+  // Abre popup hacia el Worker que redirige a Google. Cuando vuelve al bridge
+  // (mismo origin), lo detectamos por POLLING (no postMessage — Google rompe
+  // window.opener via COOP y no se restaura).
   var popupUrl = API_BASE + '/gmail/oauth/start';
   var w = 520, hgt = 720;
   var left = (window.screen.availWidth - w) / 2;
   var top  = (window.screen.availHeight - hgt) / 2;
   var popup = window.open(
     popupUrl,
-    'gmail-oauth',
+    'gmail-oauth-' + Date.now(),  // unique name para forzar nueva instancia
     'width=' + w + ',height=' + hgt + ',left=' + left + ',top=' + top + ',scrollbars=yes'
   );
   if (!popup) {
@@ -12292,32 +12292,58 @@ function connectMyGmail() {
 
   adminShowToast('🔗 ' + t('alerts.myGmail.opening'));
 
-  // Listener para el postMessage que viene del oauth-bridge.html.
-  // El bridge corre en el MISMO origin que el dashboard (GitHub Pages), por eso
-  // postMessage funciona (window.opener accesible) incluso después del paso por Google.
-  if (!_gmailOAuthListenerActive) {
-    _gmailOAuthListenerActive = true;
-    window.addEventListener('message', function gmailMsgHandler(event) {
-      var d = event.data;
-      if (!d || d.type !== 'gmail_oauth_result') return;
-      // Validamos origin: debe venir del mismo dashboard (donde está el bridge)
-      if (event.origin !== window.location.origin) return;
-
-      if (d.success && d.refresh_token) {
+  // POLLING: cada 500ms intentamos leer popup.location.
+  // Mientras el popup esté en Google o el Worker, vamos a tener SecurityError
+  // (cross-origin) — lo ignoramos. Cuando llegue al bridge (mismo origin),
+  // podremos leer el hash con los tokens.
+  var startedAt = Date.now();
+  var pollInterval = setInterval(function() {
+    // Timeout: 3 minutos
+    if (Date.now() - startedAt > 180000) {
+      clearInterval(pollInterval);
+      if (popup && !popup.closed) try { popup.close(); } catch(e) {}
+      return;
+    }
+    // Popup cerrado por el usuario manualmente
+    if (popup.closed) {
+      clearInterval(pollInterval);
+      return;
+    }
+    // Intentar leer la URL del popup. Si está cross-origin, salta SecurityError → silenciamos
+    var popupUrlNow;
+    try { popupUrlNow = popup.location.href; }
+    catch(e) { return; }
+    // Si está en nuestro origen y es el bridge → procesar tokens
+    if (popupUrlNow && popupUrlNow.indexOf(window.location.origin) === 0 && popupUrlNow.indexOf('oauth-bridge.html') !== -1) {
+      var hash = (popup.location.hash || '').replace(/^#/, '');
+      clearInterval(pollInterval);
+      // Cerrar el popup primero
+      try { popup.close(); } catch(e) {}
+      // Parsear el hash
+      var params = {};
+      hash.split('&').forEach(function(p) {
+        var kv = p.split('=');
+        if (kv[0]) params[kv[0]] = decodeURIComponent(kv[1] || '');
+      });
+      var success = params.success === '1';
+      var email = params.email || '';
+      var refreshToken = params.refresh_token || '';
+      var errMsg = params.error || '';
+      if (success && refreshToken) {
         setMyGmailConnection({
           connected: true,
-          email: d.email,
-          refresh_token: d.refresh_token,
+          email: email,
+          refresh_token: refreshToken,
           source: 'oauth',
           connectedAt: new Date().toISOString()
         });
         buildAlertsSection();
-        adminShowToast('✅ ' + tf('alerts.myGmail.connectedSuccess', d.email));
+        adminShowToast('✅ ' + tf('alerts.myGmail.connectedSuccess', email));
       } else {
-        adminShowToast('❌ ' + (d.error || t('alerts.myGmail.connectFailed')));
+        adminShowToast('❌ ' + (errMsg || t('alerts.myGmail.connectFailed')));
       }
-    });
-  }
+    }
+  }, 500);
 }
 function disconnectMyGmail() {
   if (!confirm(t('alerts.myGmail.disconnectConfirm'))) return;
