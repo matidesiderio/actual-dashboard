@@ -3337,6 +3337,141 @@
     }
     .cw-social-input:focus { outline: none; border-color: var(--lime); }
     [data-theme="light"] .cw-social-input { background: #FFFFFF; color: #1a1a1a; }
+
+    /* Alertas y Reportes */
+    .alerts-block {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
+    }
+    .alerts-block-title {
+      font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
+      color: var(--white); letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .alerts-hint {
+      font-size: 12px; color: var(--gray);
+      margin-bottom: 14px; line-height: 1.5;
+    }
+    .alerts-conn-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .alerts-conn-row.connected { border-color: rgba(16,216,121,0.35); background: rgba(16,216,121,0.06); }
+    .alerts-conn-icon {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #10D879; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+    .alerts-conn-info { flex: 1; min-width: 0; }
+    .alerts-conn-email { font-size: 13px; color: var(--white); font-weight: 600; }
+    .alerts-conn-source { font-size: 11px; color: var(--gray); margin-top: 2px; }
+    .alerts-conn-btn {
+      background: var(--lime); color: #fff; border: none;
+      font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.5px; padding: 9px 16px; border-radius: 8px;
+      cursor: pointer; box-shadow: 0 4px 14px var(--lime-soft);
+      transition: filter 0.15s, transform 0.15s;
+    }
+    .alerts-conn-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .alerts-conn-btn-secondary {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-2); font-size: 11px; font-weight: 600;
+      padding: 7px 12px; border-radius: 6px; cursor: pointer;
+      font-family: 'Sora', sans-serif;
+    }
+    .alerts-conn-btn-secondary:hover { border-color: #FF4D6D; color: #FF4D6D; }
+
+    .alerts-toggle-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+    .alerts-switch {
+      position: relative; display: inline-block;
+      width: 38px; height: 22px; flex-shrink: 0;
+    }
+    .alerts-switch input { opacity: 0; width: 0; height: 0; }
+    .alerts-switch-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 22px; transition: 0.2s;
+    }
+    .alerts-switch-slider:before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; left: 2px; top: 2px;
+      background: var(--gray); border-radius: 50%;
+      transition: 0.2s;
+    }
+    .alerts-switch input:checked + .alerts-switch-slider {
+      background: var(--lime-soft); border-color: var(--lime);
+    }
+    .alerts-switch input:checked + .alerts-switch-slider:before {
+      transform: translateX(16px); background: var(--lime);
+    }
+
+    .alerts-field { display: flex; flex-direction: column; gap: 4px; max-width: 360px; }
+    .alerts-field label { font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .alerts-field input {
+      background: var(--surface-2); color: var(--white);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 9px 12px; font-size: 13px;
+      font-family: 'Inter', sans-serif;
+    }
+    .alerts-field input:focus { outline: none; border-color: var(--lime); }
+    [data-theme="light"] .alerts-field input { background: #FFFFFF; color: #1a1a1a; }
+
+    .alerts-next-send {
+      font-size: 11.5px; color: var(--lime);
+      margin-top: 10px; font-weight: 600;
+    }
+    .alerts-test-btn {
+      margin-top: 14px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-2); font-family: 'Sora', sans-serif;
+      font-size: 11.5px; font-weight: 600; letter-spacing: 0.3px;
+      padding: 8px 14px; border-radius: 7px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .alerts-test-btn:hover { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+
+    .alerts-client-list { display: flex; flex-direction: column; gap: 8px; }
+    .alerts-client-row {
+      display: grid; grid-template-columns: 32px 1fr auto 38px 36px;
+      align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      transition: border-color 0.15s;
+    }
+    .alerts-client-row.enabled { border-color: rgba(16,216,121,0.35); }
+    .alerts-client-logo {
+      width: 32px; height: 32px; border-radius: 7px;
+      background: var(--card); display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif; font-size: 11px; font-weight: 700; color: var(--white);
+      border: 1px solid var(--border);
+    }
+    .alerts-client-name {
+      font-size: 13px; font-weight: 600; color: var(--white);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .alerts-client-fields { display: flex; gap: 8px; align-items: center; }
+    .alerts-input-mini {
+      background: var(--card); color: var(--white);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px; font-size: 11.5px; min-width: 200px;
+      font-family: 'Inter', sans-serif;
+    }
+    [data-theme="light"] .alerts-input-mini { background: #FFFFFF; color: #1a1a1a; }
+    .alerts-next-mini { font-size: 11px; color: var(--text-2); font-weight: 600; white-space: nowrap; }
+    .alerts-test-btn-mini {
+      background: transparent; border: 1px solid var(--border);
+      width: 32px; height: 32px; border-radius: 7px;
+      cursor: pointer; font-size: 13px;
+      transition: all 0.15s;
+    }
+    .alerts-test-btn-mini:hover { border-color: var(--lime); background: var(--lime-soft); }
+    .alerts-empty {
+      text-align: center; padding: 30px 20px;
+      color: var(--gray); font-size: 12.5px;
+      background: var(--surface-2); border-radius: 8px;
+    }
     .conn-item:hover { border-color: var(--lime); }
     .conn-item.hidden   { opacity: 0.55; }
     .conn-item.archived { opacity: 0.4; }
@@ -5433,6 +5568,7 @@
       <button class="admin-nav-btn active" id="admin-nav-overview" onclick="switchAdminSection('overview')" data-i18n="nav.overview">📊 Rendimiento de mis Cuentas</button>
       <button class="admin-nav-btn" id="admin-nav-clients" onclick="enterClientsSection()" data-i18n="nav.clients">📋 Clientes</button>
       <button class="admin-nav-btn owner-only" id="admin-nav-team" onclick="switchAdminSection('team')" data-i18n="nav.team">🧑‍💼 Mi Equipo</button>
+      <button class="admin-nav-btn" id="admin-nav-alerts" onclick="switchAdminSection('alerts')" data-i18n="nav.alerts">🔔 Alertas y Reportes</button>
       <button class="admin-nav-btn" id="admin-nav-config" onclick="switchAdminSection('config')" data-i18n="nav.config">⚙️ Configuración</button>
     </div>
 
@@ -5542,6 +5678,11 @@
     <!-- CONNECT section (Conexión y Cuentas — discover + visibility) -->
     <div id="admin-section-connect" class="agency-section">
       <!-- populated by buildConnectSection() -->
+    </div>
+
+    <!-- ALERTS section (Alertas y Reportes — Gmail + scheduling) -->
+    <div id="admin-section-alerts" class="agency-section">
+      <!-- populated by buildAlertsSection() -->
     </div>
 
     <!-- CONFIG section (now: Mi cuenta — Profile / Plans / Logout) -->
@@ -9484,7 +9625,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-21-social-v5', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-21-alerts-v6', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -11910,6 +12051,172 @@ function hideImprovementPointsDrawer() {
   if (drawer)   drawer.classList.remove('visible');
 }
 
+// ── Alertas y Reportes (Gmail + scheduling) ─────────────────────
+function buildAlertsSection() {
+  var el = document.getElementById('admin-section-alerts');
+  if (!el) return;
+  var cfg = loadAlertsConfig();
+  var conn = getMyGmailConnection();
+  var isAdmin = currentUserKey() === 'admin';
+
+  var clients = Object.keys(USERS)
+    .filter(function(id) { return !USERS[id].isAdmin && getAccountVisibility(id) === 'active'; })
+    .sort(function(a, b) {
+      return (USERS[a].clientName || a).toLowerCase().localeCompare((USERS[b].clientName || b).toLowerCase());
+    });
+
+  var h = '';
+  h += '<div class="conn-section-body">';
+  h += '  <div class="conn-header">';
+  h += '    <div>';
+  h += '      <div class="conn-title">🔔 ' + t('alerts.title') + '</div>';
+  h += '      <div class="conn-subtitle">' + t('alerts.subtitle') + '</div>';
+  h += '    </div>';
+  h += '  </div>';
+
+  // ── BLOQUE 1 — Mi conexión Gmail ───────────────────────────
+  h += '<div class="alerts-block">';
+  h += '  <div class="alerts-block-title">📧 ' + t('alerts.myGmail.title') + '</div>';
+  if (conn.connected) {
+    h += '  <div class="alerts-conn-row connected">';
+    h += '    <span class="alerts-conn-icon">✓</span>';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">' + escHtml(conn.email) + '</div>';
+    h += '      <div class="alerts-conn-source">' + (conn.source === 'preconfigured' ? t('alerts.myGmail.preconfigured') : t('alerts.myGmail.userConnected')) + '</div>';
+    h += '    </div>';
+    if (conn.source !== 'preconfigured') {
+      h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGmail()">' + t('alerts.myGmail.disconnect') + '</button>';
+    }
+    h += '  </div>';
+  } else {
+    h += '  <div class="alerts-conn-row">';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">' + t('alerts.myGmail.notConnected') + '</div>';
+    h += '      <div class="alerts-conn-source">' + t('alerts.myGmail.needConnect') + '</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn" onclick="connectMyGmail()">🔗 ' + t('alerts.myGmail.connect') + '</button>';
+    h += '  </div>';
+  }
+  h += '</div>';
+
+  // ── BLOQUE 2 — Mi resumen como admin ──────────────────────
+  if (isAdmin) {
+    var as = cfg.adminSummary;
+    h += '<div class="alerts-block">';
+    h += '  <div class="alerts-block-title">👤 ' + t('alerts.adminSummary.title') + '</div>';
+    h += '  <div class="alerts-hint">' + t('alerts.adminSummary.hint') + '</div>';
+    h += '  <div class="alerts-toggle-row">';
+    h += '    <label class="alerts-switch">';
+    h += '      <input type="checkbox" id="alerts-admin-summary-on" ' + (as.enabled ? 'checked' : '') + ' onchange="toggleAdminSummary(this.checked)" />';
+    h += '      <span class="alerts-switch-slider"></span>';
+    h += '    </label>';
+    h += '    <span>' + t('alerts.adminSummary.label') + '</span>';
+    h += '  </div>';
+    h += '  <div class="alerts-field" style="margin-top:10px;">';
+    h += '    <label>' + t('alerts.adminSummary.recipient') + '</label>';
+    h += '    <input type="email" id="alerts-admin-summary-email" value="' + escAttr(as.recipient || 'matiasdesiderio@gmail.com') + '" onchange="updateAdminSummaryEmail(this.value)" placeholder="tu@email.com" />';
+    h += '  </div>';
+    if (as.enabled) {
+      var nextAdm = as.nextSendAt || addDays(null, 15);
+      h += '  <div class="alerts-next-send">📅 ' + tf('alerts.adminSummary.nextSend', fmtDateShort(nextAdm)) + '</div>';
+    }
+    h += '  <button class="alerts-test-btn" onclick="sendAdminSummaryNow()">📧 ' + t('alerts.adminSummary.sendNow') + '</button>';
+    h += '</div>';
+  }
+
+  // ── BLOQUE 3 — Reportes por cliente ────────────────────────
+  h += '<div class="alerts-block">';
+  h += '  <div class="alerts-block-title">📊 ' + t('alerts.perClient.title') + '</div>';
+  h += '  <div class="alerts-hint">' + t('alerts.perClient.hint') + '</div>';
+  if (clients.length === 0) {
+    h += '  <div class="alerts-empty">' + t('alerts.perClient.noClients') + '</div>';
+  } else {
+    h += '  <div class="alerts-client-list">';
+    clients.forEach(function(cid) {
+      var u = USERS[cid];
+      var pc = cfg.perClient[cid] || { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+      var logo = u.logo || (u.clientName || cid).substring(0, 2).toUpperCase();
+      var nextSend = pc.nextSendAt || (pc.enabled ? addDays(pc.lastSentAt, 15) : null);
+      h += '<div class="alerts-client-row ' + (pc.enabled ? 'enabled' : '') + '">';
+      h += '  <div class="alerts-client-logo">' + escHtml(logo) + '</div>';
+      h += '  <div class="alerts-client-name">' + escHtml(u.clientName || cid) + '</div>';
+      h += '  <div class="alerts-client-fields">';
+      h += '    <input type="email" class="alerts-input-mini" placeholder="email@cliente.com" value="' + escAttr(pc.recipient || '') + '" oninput="updateClientRecipient(\'' + cid + '\', this.value)" />';
+      h += '    <span class="alerts-next-mini">' + (nextSend ? '📅 ' + fmtDateShort(nextSend) : '—') + '</span>';
+      h += '  </div>';
+      h += '  <label class="alerts-switch">';
+      h += '    <input type="checkbox" ' + (pc.enabled ? 'checked' : '') + ' onchange="toggleClientSchedule(\'' + cid + '\', this.checked)" />';
+      h += '    <span class="alerts-switch-slider"></span>';
+      h += '  </label>';
+      h += '  <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')">📧</button>';
+      h += '</div>';
+    });
+    h += '  </div>';
+  }
+  h += '</div>';
+
+  h += '</div>'; // conn-section-body
+  el.innerHTML = h;
+}
+
+// ── Action handlers (stubs por ahora — Fase 1B conecta envío real) ──
+function connectMyGmail() {
+  if (typeof adminShowToast === 'function') {
+    adminShowToast('🔗 ' + t('alerts.myGmail.comingSoon'));
+  }
+  // TODO Fase 1B: launch Google OAuth popup with gmail.send scope
+}
+function disconnectMyGmail() {
+  if (!confirm(t('alerts.myGmail.disconnectConfirm'))) return;
+  setMyGmailConnection(null);
+  buildAlertsSection();
+}
+function toggleAdminSummary(on) {
+  var cfg = loadAlertsConfig();
+  cfg.adminSummary.enabled = !!on;
+  if (on && !cfg.adminSummary.nextSendAt) cfg.adminSummary.nextSendAt = addDays(null, 15);
+  if (!on) cfg.adminSummary.nextSendAt = null;
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
+}
+function updateAdminSummaryEmail(v) {
+  var cfg = loadAlertsConfig();
+  cfg.adminSummary.recipient = (v || '').trim();
+  saveAlertsConfig(cfg);
+}
+function sendAdminSummaryNow() {
+  var cfg = loadAlertsConfig();
+  var recipient = (cfg.adminSummary.recipient || '').trim();
+  if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
+  var conn = getMyGmailConnection();
+  if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
+  adminShowToast('📧 ' + tf('alerts.testEnqueued', recipient) + ' (Fase 1B activa envío real)');
+}
+function toggleClientSchedule(cid, on) {
+  var cfg = loadAlertsConfig();
+  if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+  cfg.perClient[cid].enabled = !!on;
+  if (on && !cfg.perClient[cid].nextSendAt) cfg.perClient[cid].nextSendAt = addDays(null, 15);
+  if (!on) cfg.perClient[cid].nextSendAt = null;
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
+}
+function updateClientRecipient(cid, v) {
+  var cfg = loadAlertsConfig();
+  if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+  cfg.perClient[cid].recipient = (v || '').trim();
+  saveAlertsConfig(cfg);
+}
+function sendClientReportNow(cid) {
+  var cfg = loadAlertsConfig();
+  var pc = cfg.perClient[cid] || {};
+  var recipient = (pc.recipient || '').trim();
+  if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
+  var conn = getMyGmailConnection();
+  if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
+  adminShowToast('📧 ' + tf('alerts.testEnqueued', recipient) + ' (Fase 1B activa envío real)');
+}
+
 // ── Conexión y Cuentas (visibility + discovery) ─────────────────
 var connTab = 'managed'; // 'managed' | 'meta' | 'google'
 var connSearch = '';
@@ -12427,6 +12734,61 @@ function addDiscoveredAccount(platform, externalId, name, currency, mcc) {
 
   if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('conn.added', name || externalId));
   buildConnectSection();
+}
+
+// ── Alertas y Reportes — Data layer ─────────────────────────────
+var ALERTS_CONFIG_KEY = 'actual_alerts_config';
+var GMAIL_CONNECTIONS_KEY = 'actual_gmail_connections';
+
+function loadAlertsConfig() {
+  try {
+    var c = JSON.parse(localStorage.getItem(ALERTS_CONFIG_KEY)) || {};
+    if (!c.perClient) c.perClient = {};
+    if (!c.adminSummary) c.adminSummary = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+    return c;
+  } catch(e) { return { perClient: {}, adminSummary: { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null } }; }
+}
+function saveAlertsConfig(cfg) {
+  try { localStorage.setItem(ALERTS_CONFIG_KEY, JSON.stringify(cfg)); } catch(e) {}
+}
+function loadGmailConnections() {
+  try { return JSON.parse(localStorage.getItem(GMAIL_CONNECTIONS_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveGmailConnections(map) {
+  try { localStorage.setItem(GMAIL_CONNECTIONS_KEY, JSON.stringify(map)); } catch(e) {}
+}
+// Identifier of the current operating user (admin or member). For admin = 'admin', for member = memberId.
+function currentUserKey() {
+  if (typeof isManager === 'function' && isManager()) {
+    return getSessionMemberId() || 'admin';
+  }
+  return 'admin';
+}
+// Gmail connection for the current user — admin has a pre-configured default.
+function getMyGmailConnection() {
+  var key = currentUserKey();
+  if (key === 'admin') {
+    return { connected: true, email: 'matiasdesiderio@gmail.com', source: 'preconfigured' };
+  }
+  var map = loadGmailConnections();
+  return map[key] || { connected: false, email: '', source: null };
+}
+function setMyGmailConnection(conn) {
+  var key = currentUserKey();
+  if (key === 'admin') return; // admin uses preconfigured
+  var map = loadGmailConnections();
+  if (conn) map[key] = conn;
+  else delete map[key];
+  saveGmailConnections(map);
+}
+function addDays(dateIso, days) {
+  var d = dateIso ? new Date(dateIso) : new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }); } catch(e) { return iso; }
 }
 
 // Default card metrics per platform (when client has no custom config)
@@ -14398,6 +14760,32 @@ var TRANSLATIONS = {
   'clients.wiz.socialHelp':      { es: 'Cargá los usuarios de cada red para que el dashboard pueda traer métricas orgánicas (followers, engagement, posts). Si el cliente solo hace paid media, dejá vacío.', en: 'Enter handles for each network so the dashboard can fetch organic metrics (followers, engagement, posts). Leave blank if client only runs paid media.', pt: 'Insira os usuários para puxar métricas orgânicas.', de: 'Handles eingeben für organische Metriken.', zh: '输入用户名以获取自然指标。' },
   'clients.wiz.socialIdsNote':   { es: 'Para Instagram y Facebook, además del usuario podés cargar los IDs del Graph API (avanzado).', en: 'For Instagram/Facebook, you can also add Graph API IDs (advanced).', pt: 'Para IG/FB, IDs do Graph API são opcionais (avançado).', de: 'IG/FB Graph API IDs sind optional (Erweitert).', zh: '可选添加 IG/FB 的 Graph API ID（高级）。' },
   'clients.wiz.socialAdvanced':  { es: 'IDs avanzados (Graph API)', en: 'Advanced IDs (Graph API)', pt: 'IDs avançados (Graph API)', de: 'Erweiterte IDs (Graph API)', zh: '高级 ID（Graph API）' },
+
+  // Alertas y Reportes
+  'nav.alerts':                  { es: '🔔 Alertas y Reportes', en: '🔔 Alerts & Reports', pt: '🔔 Alertas e Relatórios', de: '🔔 Benachrichtigungen', zh: '🔔 提醒和报告' },
+  'alerts.title':                { es: 'Alertas y Reportes', en: 'Alerts & Reports', pt: 'Alertas e Relatórios', de: 'Benachrichtigungen', zh: '提醒和报告' },
+  'alerts.subtitle':             { es: 'Programá reportes automáticos cada 15 días por cliente y un resumen quincenal con tus cuentas más críticas.', en: 'Schedule automatic reports every 15 days per client and a bi-weekly summary of your most critical accounts.', pt: 'Programe relatórios automáticos quinzenais.', de: 'Planen Sie automatische Berichte alle 15 Tage.', zh: '安排每 15 天的自动报告。' },
+  'alerts.myGmail.title':        { es: 'Mi conexión Gmail', en: 'My Gmail connection', pt: 'Minha conexão Gmail', de: 'Meine Gmail-Verbindung', zh: '我的 Gmail 连接' },
+  'alerts.myGmail.preconfigured':{ es: 'Cuenta preconfigurada del administrador', en: 'Pre-configured admin account', pt: 'Conta admin pré-configurada', de: 'Vorkonfiguriertes Admin-Konto', zh: '预配置的管理员账户' },
+  'alerts.myGmail.userConnected':{ es: 'Conectado por OAuth — los reportes salen desde tu Gmail', en: 'Connected via OAuth — reports are sent from your Gmail', pt: 'Conectado via OAuth', de: 'Über OAuth verbunden', zh: '通过 OAuth 连接' },
+  'alerts.myGmail.notConnected': { es: 'Sin Gmail conectado', en: 'No Gmail connected', pt: 'Sem Gmail conectado', de: 'Kein Gmail verbunden', zh: '未连接 Gmail' },
+  'alerts.myGmail.needConnect':  { es: 'Necesitás conectar tu Gmail para que los reportes salgan desde tu correo personal.', en: 'You need to connect your Gmail so reports are sent from your personal email.', pt: 'Conecte seu Gmail para envios.', de: 'Verbinde dein Gmail.', zh: '连接您的 Gmail。' },
+  'alerts.myGmail.connect':      { es: 'Conectar mi Gmail', en: 'Connect my Gmail', pt: 'Conectar meu Gmail', de: 'Mein Gmail verbinden', zh: '连接我的 Gmail' },
+  'alerts.myGmail.disconnect':   { es: 'Desconectar', en: 'Disconnect', pt: 'Desconectar', de: 'Trennen', zh: '断开' },
+  'alerts.myGmail.disconnectConfirm': { es: '¿Desconectar tu cuenta Gmail? Los reportes programados dejarán de enviarse hasta que reconectes.', en: 'Disconnect your Gmail? Scheduled reports will stop until you reconnect.', pt: 'Desconectar Gmail?', de: 'Gmail trennen?', zh: '断开 Gmail？' },
+  'alerts.myGmail.comingSoon':   { es: 'OAuth de Gmail listo en próxima fase. Por ahora la UI guarda la configuración.', en: 'Gmail OAuth coming in next phase. For now the UI just saves config.', pt: 'OAuth do Gmail em breve.', de: 'Gmail OAuth in Kürze.', zh: 'Gmail OAuth 即将推出。' },
+  'alerts.adminSummary.title':   { es: 'Mi resumen como admin', en: 'My admin summary', pt: 'Meu resumo admin', de: 'Meine Admin-Zusammenfassung', zh: '我的管理员摘要' },
+  'alerts.adminSummary.hint':    { es: 'Cada 15 días recibís un email con tus cuentas en mayor riesgo (críticas y de atención), priorizadas por score de crisis. Sirve para decidir dónde meter foco esa quincena.', en: 'Every 15 days you receive an email with your highest-risk accounts, prioritized by crisis score. Helps you focus.', pt: 'A cada 15 dias recebe um resumo das contas em risco.', de: 'Alle 15 Tage erhalten Sie eine Zusammenfassung.', zh: '每 15 天收到摘要。' },
+  'alerts.adminSummary.label':   { es: 'Activar resumen quincenal', en: 'Enable bi-weekly summary', pt: 'Ativar resumo quinzenal', de: 'Wöchentliche Zusammenfassung aktivieren', zh: '启用每两周摘要' },
+  'alerts.adminSummary.recipient':{ es: 'Tu email', en: 'Your email', pt: 'Seu email', de: 'Deine E-Mail', zh: '您的电子邮件' },
+  'alerts.adminSummary.nextSend':{ es: 'Próximo envío: {0}', en: 'Next send: {0}', pt: 'Próximo envio: {0}', de: 'Nächster Versand: {0}', zh: '下次发送: {0}' },
+  'alerts.adminSummary.sendNow': { es: 'Enviarme uno ahora (test)', en: 'Send one now (test)', pt: 'Enviar agora (teste)', de: 'Jetzt senden (Test)', zh: '立即发送 (测试)' },
+  'alerts.perClient.title':      { es: 'Reportes quincenales por cliente', en: 'Bi-weekly reports per client', pt: 'Relatórios quinzenais por cliente', de: 'Zweiwöchentliche Berichte pro Kunde', zh: '每个客户的双周报告' },
+  'alerts.perClient.hint':       { es: 'Activá el toggle de los clientes que quieras que reciban un reporte automático cada 15 días desde tu Gmail. Cada uno se envía a su email destinatario.', en: 'Toggle clients to enable automatic bi-weekly reports from your Gmail. Each sent to its assigned email.', pt: 'Ative os toggles para enviar relatórios automáticos.', de: 'Toggles aktivieren für automatische Berichte.', zh: '启用切换以发送自动报告。' },
+  'alerts.perClient.noClients':  { es: 'Todavía no tenés clientes activos. Agregá algunos desde "Clientes".', en: 'No active clients yet. Add some from "Clients".', pt: 'Sem clientes ativos ainda.', de: 'Noch keine aktiven Kunden.', zh: '尚无活跃客户。' },
+  'alerts.testEnqueued':         { es: 'Test encolado a {0}', en: 'Test queued to {0}', pt: 'Teste enfileirado para {0}', de: 'Test in Warteschlange für {0}', zh: '测试已排队发送至 {0}' },
+  'alerts.errors.noRecipient':   { es: 'Falta el email destinatario', en: 'Recipient email is missing', pt: 'Email destinatário ausente', de: 'Empfänger-E-Mail fehlt', zh: '缺少收件人邮箱' },
+  'alerts.errors.notConnected':  { es: 'Conectá tu Gmail primero', en: 'Connect your Gmail first', pt: 'Conecte seu Gmail primeiro', de: 'Gmail zuerst verbinden', zh: '首先连接 Gmail' },
   'report.editClient':           { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
 
   // Filter por responsable
@@ -15647,6 +16035,14 @@ function switchAdminSection(section) {
     if (dpWrap)          dpWrap.style.display = 'none';
     if (rtWrap)          rtWrap.style.display = 'none';
     if (typeof buildConnectSection === 'function') buildConnectSection();
+  } else if (section === 'alerts') {
+    if (overviewSidebar) overviewSidebar.style.display = 'none';
+    if (clientList)      clientList.style.display = 'none';
+    if (newClientBtn)    newClientBtn.style.display = 'none';
+    if (refreshBtn)      refreshBtn.style.display = 'none';
+    if (dpWrap)          dpWrap.style.display = 'none';
+    if (rtWrap)          rtWrap.style.display = 'none';
+    if (typeof buildAlertsSection === 'function') buildAlertsSection();
   } else if (section === 'config') {
     if (overviewSidebar) overviewSidebar.style.display = 'none';
     if (clientList)      clientList.style.display = 'none';
