@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-26-oauth-only-v12', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-26-oauth-bridge-v13', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12292,16 +12292,16 @@ function connectMyGmail() {
 
   adminShowToast('🔗 ' + t('alerts.myGmail.opening'));
 
-  // Listener para el postMessage que viene del callback del Worker.
-  // Lo dejamos solo una vez por sesión para no acumular.
+  // Listener para el postMessage que viene del oauth-bridge.html.
+  // El bridge corre en el MISMO origin que el dashboard (GitHub Pages), por eso
+  // postMessage funciona (window.opener accesible) incluso después del paso por Google.
   if (!_gmailOAuthListenerActive) {
     _gmailOAuthListenerActive = true;
     window.addEventListener('message', function gmailMsgHandler(event) {
       var d = event.data;
       if (!d || d.type !== 'gmail_oauth_result') return;
-      // Validamos origin: debe venir del Worker
-      var workerOrigin = new URL(API_BASE).origin;
-      if (event.origin !== workerOrigin) return;
+      // Validamos origin: debe venir del mismo dashboard (donde está el bridge)
+      if (event.origin !== window.location.origin) return;
 
       if (d.success && d.refresh_token) {
         setMyGmailConnection({

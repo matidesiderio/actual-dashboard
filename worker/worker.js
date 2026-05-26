@@ -322,73 +322,29 @@ async function handleGmailOAuthCallback(request, env, url) {
   const code  = url.searchParams.get('code');
   const error = url.searchParams.get('error');
 
-  function pageHtml(opts) {
-    const success = !!opts.success;
-    const email = opts.email || '';
-    const refreshToken = opts.refresh_token || '';
-    const errorMsg = opts.error || '';
-    return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-<title>${success ? 'Gmail conectado' : 'Error al conectar Gmail'}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0D0D0D; color: #F0F0F0; padding: 40px 24px; margin: 0; text-align: center; }
-  .ok { color: #10D879; }
-  .bad { color: #FF4D4D; }
-  h1 { font-size: 22px; margin: 0 0 12px; }
-  p { color: #888; font-size: 13px; line-height: 1.5; }
-  .email { font-family: monospace; background: #161616; padding: 8px 14px; border-radius: 7px; display: inline-block; margin-top: 12px; }
-</style>
-</head>
-<body>
-  ${success ? `
-    <h1 class="ok">✓ Gmail conectado</h1>
-    <p>Cuenta:</p>
-    <p class="email">${email}</p>
-    <p style="margin-top:24px;">Esta ventana se cierra automáticamente.</p>
-  ` : `
-    <h1 class="bad">⚠ No se pudo conectar Gmail</h1>
-    <p>${errorMsg || 'Error desconocido'}</p>
-    <p style="margin-top:20px;">Podés cerrar esta ventana y volver a intentar.</p>
-  `}
-  <script>
-    (function() {
-      try {
-        if (window.opener) {
-          window.opener.postMessage({
-            type: 'gmail_oauth_result',
-            success: ${success ? 'true' : 'false'},
-            email: ${JSON.stringify(email)},
-            refresh_token: ${JSON.stringify(refreshToken)},
-            error: ${JSON.stringify(errorMsg)}
-          }, '*');
-        }
-      } catch(e) { console.error('postMessage error:', e); }
-      setTimeout(function() { try { window.close(); } catch(e) {} }, 2500);
-    })();
-  </script>
-</body>
-</html>`;
+  // Bridge page URL (same origin as dashboard) — desde ahí postMessage funciona
+  // porque GitHub Pages no tiene COOP same-origin como sí tiene Google.
+  const BRIDGE_URL = 'https://matidesiderio.github.io/actual-dashboard/oauth-bridge.html';
+
+  function redirectToBridge(params) {
+    // Pasar tokens y status en el URL fragment (no en query — más seguro,
+    // el fragment no se manda al server)
+    const hashParts = [];
+    Object.keys(params).forEach(function(k) {
+      hashParts.push(k + '=' + encodeURIComponent(params[k] == null ? '' : params[k]));
+    });
+    const finalUrl = BRIDGE_URL + '#' + hashParts.join('&');
+    return Response.redirect(finalUrl, 302);
   }
 
   if (error) {
-    return new Response(pageHtml({ success: false, error: 'Google devolvió: ' + error }), {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-    });
+    return redirectToBridge({ success: '0', error: 'Google devolvió: ' + error });
   }
   if (!code) {
-    return new Response(pageHtml({ success: false, error: 'Falta el código de autorización' }), {
-      status: 400,
-      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-    });
+    return redirectToBridge({ success: '0', error: 'Falta el código de autorización' });
   }
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    return new Response(pageHtml({ success: false, error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' }), {
-      status: 500,
-      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-    });
+    return redirectToBridge({ success: '0', error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
   }
 
   // Exchange authorization code for tokens
@@ -405,10 +361,10 @@ async function handleGmailOAuthCallback(request, env, url) {
   });
   const tokens = await tokenRes.json();
   if (!tokens.refresh_token) {
-    return new Response(pageHtml({
-      success: false,
+    return redirectToBridge({
+      success: '0',
       error: 'Google no devolvió refresh_token (puede que ya hayas autorizado antes — revoca el acceso en https://myaccount.google.com/permissions y volvé a intentar)'
-    }), { status: 400, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+    });
   }
 
   // Get user's email via userinfo endpoint
@@ -421,13 +377,10 @@ async function handleGmailOAuthCallback(request, env, url) {
     userEmail = ui.email || '';
   } catch(e) { /* ignore */ }
 
-  return new Response(pageHtml({
-    success: true,
+  return redirectToBridge({
+    success: '1',
     email: userEmail,
     refresh_token: tokens.refresh_token
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
   });
 }
 
