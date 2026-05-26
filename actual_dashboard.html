@@ -3432,7 +3432,51 @@
     }
     .alerts-test-btn:hover { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
 
-    .alerts-client-list { display: flex; flex-direction: column; gap: 8px; }
+    .alerts-client-list { display: flex; flex-direction: column; gap: 10px; }
+    .alerts-client-card {
+      padding: 14px 16px; border-radius: 10px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      transition: border-color 0.15s;
+    }
+    .alerts-client-card.enabled { border-color: rgba(16,216,121,0.35); }
+    .alerts-client-card-head {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .alerts-client-card-body {
+      display: flex; gap: 10px; align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .alerts-client-card-body .alerts-field { flex: 1; min-width: 130px; }
+    .alerts-client-card-body input,
+    .alerts-client-card-body select {
+      background: var(--card); color: var(--white);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 7px 10px; font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      width: 100%;
+    }
+    [data-theme="light"] .alerts-client-card-body input,
+    [data-theme="light"] .alerts-client-card-body select { background: #FFFFFF; color: #1a1a1a; }
+    .alerts-tz-pill {
+      font-size: 10px; font-weight: 600;
+      padding: 3px 9px; border-radius: 999px;
+      background: rgba(139,92,246,0.18); color: #B89AFA;
+      letter-spacing: 0.3px;
+    }
+    .alerts-config-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .alerts-config-grid select,
+    .alerts-config-grid input {
+      background: var(--surface-2); color: var(--white);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 9px 12px; font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      width: 100%;
+    }
+    [data-theme="light"] .alerts-config-grid select,
+    [data-theme="light"] .alerts-config-grid input { background: #FFFFFF; color: #1a1a1a; }
     .alerts-client-row {
       display: grid; grid-template-columns: 32px 1fr auto 38px 36px;
       align-items: center; gap: 12px;
@@ -9571,6 +9615,7 @@ function applyExtraAccountsToUSERS() {
       iaContext:    e.iaContext  || '',
       igBusinessId: e.igBusinessId || null,
       fbPageId:     e.fbPageId     || null,
+      timezone:     e.timezone     || 'America/Argentina/Buenos_Aires',
       _extra:       true,
     };
   });
@@ -9625,7 +9670,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-21-alerts-v6', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-21-alerts-tz-v7', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12112,13 +12157,36 @@ function buildAlertsSection() {
     h += '    </label>';
     h += '    <span>' + t('alerts.adminSummary.label') + '</span>';
     h += '  </div>';
-    h += '  <div class="alerts-field" style="margin-top:10px;">';
-    h += '    <label>' + t('alerts.adminSummary.recipient') + '</label>';
-    h += '    <input type="email" id="alerts-admin-summary-email" value="' + escAttr(as.recipient || 'matiasdesiderio@gmail.com') + '" onchange="updateAdminSummaryEmail(this.value)" placeholder="tu@email.com" />';
+    // Frequency + hour + recipient + timezone in a grid
+    h += '  <div class="alerts-config-grid" style="margin-top:14px;">';
+    h += '    <div class="alerts-field">';
+    h += '      <label>' + t('alerts.field.frequency') + '</label>';
+    h += '      <select onchange="updateAdminSummaryFreq(this.value)">';
+    h += '        <option value="weekly"   ' + (as.frequency === 'weekly'   ? 'selected' : '') + '>' + t('alerts.freq.weekly') + '</option>';
+    h += '        <option value="biweekly" ' + (as.frequency === 'biweekly' ? 'selected' : '') + '>' + t('alerts.freq.biweekly') + '</option>';
+    h += '      </select>';
+    h += '    </div>';
+    h += '    <div class="alerts-field">';
+    h += '      <label>' + t('alerts.field.hour') + '</label>';
+    h += '      <select onchange="updateAdminSummaryHour(this.value)">';
+    [7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(hr) {
+      var sel = as.hour === hr ? 'selected' : '';
+      h += '<option value="' + hr + '" ' + sel + '>' + (hr < 10 ? '0' + hr : hr) + ':00</option>';
+    });
+    h += '      </select>';
+    h += '    </div>';
+    h += '    <div class="alerts-field" style="grid-column:span 2;">';
+    h += '      <label>' + t('alerts.adminSummary.recipient') + '</label>';
+    h += '      <input type="email" id="alerts-admin-summary-email" value="' + escAttr(as.recipient || 'matiasdesiderio@gmail.com') + '" onchange="updateAdminSummaryEmail(this.value)" placeholder="tu@email.com" />';
+    h += '    </div>';
+    h += '    <div class="alerts-field" style="grid-column:span 2;">';
+    h += '      <label>🌐 ' + t('alerts.field.timezone') + '</label>';
+    h += '      <select onchange="updateAdminSummaryTz(this.value)">' + renderTimezoneOptions(as.timezone) + '</select>';
+    h += '    </div>';
     h += '  </div>';
     if (as.enabled) {
-      var nextAdm = as.nextSendAt || addDays(null, 15);
-      h += '  <div class="alerts-next-send">📅 ' + tf('alerts.adminSummary.nextSend', fmtDateShort(nextAdm)) + '</div>';
+      var nextAdm = as.nextSendAt || computeNextSendAt(as.timezone, as.hour, as.frequency, as.lastSentAt);
+      h += '  <div class="alerts-next-send">📅 ' + tf('alerts.nextSend', formatNextSendFriendly(nextAdm, as.timezone)) + '</div>';
     }
     h += '  <button class="alerts-test-btn" onclick="sendAdminSummaryNow()">📧 ' + t('alerts.adminSummary.sendNow') + '</button>';
     h += '</div>';
@@ -12134,21 +12202,51 @@ function buildAlertsSection() {
     h += '  <div class="alerts-client-list">';
     clients.forEach(function(cid) {
       var u = USERS[cid];
-      var pc = cfg.perClient[cid] || { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+      var pc = cfg.perClient[cid] || { enabled: false, recipient: '', frequency: 'biweekly', hour: 9, lastSentAt: null, nextSendAt: null };
+      if (!pc.frequency) pc.frequency = 'biweekly';
+      if (!pc.hour) pc.hour = 9;
+      var clientTz = u.timezone || 'America/Argentina/Buenos_Aires';
       var logo = u.logo || (u.clientName || cid).substring(0, 2).toUpperCase();
-      var nextSend = pc.nextSendAt || (pc.enabled ? addDays(pc.lastSentAt, 15) : null);
-      h += '<div class="alerts-client-row ' + (pc.enabled ? 'enabled' : '') + '">';
-      h += '  <div class="alerts-client-logo">' + escHtml(logo) + '</div>';
-      h += '  <div class="alerts-client-name">' + escHtml(u.clientName || cid) + '</div>';
-      h += '  <div class="alerts-client-fields">';
-      h += '    <input type="email" class="alerts-input-mini" placeholder="email@cliente.com" value="' + escAttr(pc.recipient || '') + '" oninput="updateClientRecipient(\'' + cid + '\', this.value)" />';
-      h += '    <span class="alerts-next-mini">' + (nextSend ? '📅 ' + fmtDateShort(nextSend) : '—') + '</span>';
+      var nextSend = (pc.enabled) ? (pc.nextSendAt || computeNextSendAt(clientTz, pc.hour, pc.frequency, pc.lastSentAt)) : null;
+      h += '<div class="alerts-client-card ' + (pc.enabled ? 'enabled' : '') + '">';
+      // Header row
+      h += '  <div class="alerts-client-card-head">';
+      h += '    <div class="alerts-client-logo">' + escHtml(logo) + '</div>';
+      h += '    <div class="alerts-client-name">' + escHtml(u.clientName || cid) + '</div>';
+      h += '    <span class="alerts-tz-pill">🌐 ' + escHtml(getTimezoneLabel(clientTz).split(' (')[0]) + '</span>';
+      h += '    <span style="flex:1;"></span>';
+      h += '    <label class="alerts-switch">';
+      h += '      <input type="checkbox" ' + (pc.enabled ? 'checked' : '') + ' onchange="toggleClientSchedule(\'' + cid + '\', this.checked)" />';
+      h += '      <span class="alerts-switch-slider"></span>';
+      h += '    </label>';
       h += '  </div>';
-      h += '  <label class="alerts-switch">';
-      h += '    <input type="checkbox" ' + (pc.enabled ? 'checked' : '') + ' onchange="toggleClientSchedule(\'' + cid + '\', this.checked)" />';
-      h += '    <span class="alerts-switch-slider"></span>';
-      h += '  </label>';
-      h += '  <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')">📧</button>';
+      // Config row
+      h += '  <div class="alerts-client-card-body">';
+      h += '    <div class="alerts-field">';
+      h += '      <label>' + t('alerts.field.frequency') + '</label>';
+      h += '      <select onchange="updateClientFreq(\'' + cid + '\', this.value)">';
+      h += '        <option value="weekly"   ' + (pc.frequency === 'weekly'   ? 'selected' : '') + '>' + t('alerts.freq.weekly') + '</option>';
+      h += '        <option value="biweekly" ' + (pc.frequency === 'biweekly' ? 'selected' : '') + '>' + t('alerts.freq.biweekly') + '</option>';
+      h += '      </select>';
+      h += '    </div>';
+      h += '    <div class="alerts-field">';
+      h += '      <label>' + t('alerts.field.hour') + '</label>';
+      h += '      <select onchange="updateClientHour(\'' + cid + '\', this.value)">';
+      [7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(hr) {
+        var sel = pc.hour === hr ? 'selected' : '';
+        h += '<option value="' + hr + '" ' + sel + '>' + (hr < 10 ? '0' + hr : hr) + ':00</option>';
+      });
+      h += '      </select>';
+      h += '    </div>';
+      h += '    <div class="alerts-field" style="flex:2;">';
+      h += '      <label>' + t('alerts.field.recipient') + '</label>';
+      h += '      <input type="email" placeholder="email@cliente.com" value="' + escAttr(pc.recipient || '') + '" oninput="updateClientRecipient(\'' + cid + '\', this.value)" />';
+      h += '    </div>';
+      h += '    <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')" title="' + escAttr(t('alerts.sendTest')) + '">📧</button>';
+      h += '  </div>';
+      if (pc.enabled && nextSend) {
+        h += '  <div class="alerts-next-send" style="margin-top:8px;">📅 ' + tf('alerts.nextSend', formatNextSendFriendly(nextSend, clientTz)) + '</div>';
+      }
       h += '</div>';
     });
     h += '  </div>';
@@ -12174,8 +12272,11 @@ function disconnectMyGmail() {
 function toggleAdminSummary(on) {
   var cfg = loadAlertsConfig();
   cfg.adminSummary.enabled = !!on;
-  if (on && !cfg.adminSummary.nextSendAt) cfg.adminSummary.nextSendAt = addDays(null, 15);
-  if (!on) cfg.adminSummary.nextSendAt = null;
+  if (on) {
+    cfg.adminSummary.nextSendAt = computeNextSendAt(cfg.adminSummary.timezone, cfg.adminSummary.hour, cfg.adminSummary.frequency, cfg.adminSummary.lastSentAt);
+  } else {
+    cfg.adminSummary.nextSendAt = null;
+  }
   saveAlertsConfig(cfg);
   buildAlertsSection();
 }
@@ -12183,6 +12284,27 @@ function updateAdminSummaryEmail(v) {
   var cfg = loadAlertsConfig();
   cfg.adminSummary.recipient = (v || '').trim();
   saveAlertsConfig(cfg);
+}
+function updateAdminSummaryFreq(v) {
+  var cfg = loadAlertsConfig();
+  cfg.adminSummary.frequency = v;
+  if (cfg.adminSummary.enabled) cfg.adminSummary.nextSendAt = computeNextSendAt(cfg.adminSummary.timezone, cfg.adminSummary.hour, v, cfg.adminSummary.lastSentAt);
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
+}
+function updateAdminSummaryHour(v) {
+  var cfg = loadAlertsConfig();
+  cfg.adminSummary.hour = parseInt(v, 10);
+  if (cfg.adminSummary.enabled) cfg.adminSummary.nextSendAt = computeNextSendAt(cfg.adminSummary.timezone, cfg.adminSummary.hour, cfg.adminSummary.frequency, cfg.adminSummary.lastSentAt);
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
+}
+function updateAdminSummaryTz(v) {
+  var cfg = loadAlertsConfig();
+  cfg.adminSummary.timezone = v;
+  if (cfg.adminSummary.enabled) cfg.adminSummary.nextSendAt = computeNextSendAt(v, cfg.adminSummary.hour, cfg.adminSummary.frequency, cfg.adminSummary.lastSentAt);
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
 }
 function sendAdminSummaryNow() {
   var cfg = loadAlertsConfig();
@@ -12192,20 +12314,48 @@ function sendAdminSummaryNow() {
   if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
   adminShowToast('📧 ' + tf('alerts.testEnqueued', recipient) + ' (Fase 1B activa envío real)');
 }
+function _ensureClientPC(cfg, cid) {
+  if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', frequency: 'biweekly', hour: 9, lastSentAt: null, nextSendAt: null };
+  if (!cfg.perClient[cid].frequency) cfg.perClient[cid].frequency = 'biweekly';
+  if (!cfg.perClient[cid].hour) cfg.perClient[cid].hour = 9;
+  return cfg.perClient[cid];
+}
+function _clientTz(cid) {
+  return (USERS[cid] && USERS[cid].timezone) || 'America/Argentina/Buenos_Aires';
+}
 function toggleClientSchedule(cid, on) {
   var cfg = loadAlertsConfig();
-  if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
-  cfg.perClient[cid].enabled = !!on;
-  if (on && !cfg.perClient[cid].nextSendAt) cfg.perClient[cid].nextSendAt = addDays(null, 15);
-  if (!on) cfg.perClient[cid].nextSendAt = null;
+  var pc = _ensureClientPC(cfg, cid);
+  pc.enabled = !!on;
+  if (on) {
+    pc.nextSendAt = computeNextSendAt(_clientTz(cid), pc.hour, pc.frequency, pc.lastSentAt);
+  } else {
+    pc.nextSendAt = null;
+  }
   saveAlertsConfig(cfg);
   buildAlertsSection();
 }
 function updateClientRecipient(cid, v) {
   var cfg = loadAlertsConfig();
-  if (!cfg.perClient[cid]) cfg.perClient[cid] = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
-  cfg.perClient[cid].recipient = (v || '').trim();
+  var pc = _ensureClientPC(cfg, cid);
+  pc.recipient = (v || '').trim();
   saveAlertsConfig(cfg);
+}
+function updateClientFreq(cid, v) {
+  var cfg = loadAlertsConfig();
+  var pc = _ensureClientPC(cfg, cid);
+  pc.frequency = v;
+  if (pc.enabled) pc.nextSendAt = computeNextSendAt(_clientTz(cid), pc.hour, v, pc.lastSentAt);
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
+}
+function updateClientHour(cid, v) {
+  var cfg = loadAlertsConfig();
+  var pc = _ensureClientPC(cfg, cid);
+  pc.hour = parseInt(v, 10);
+  if (pc.enabled) pc.nextSendAt = computeNextSendAt(_clientTz(cid), pc.hour, pc.frequency, pc.lastSentAt);
+  saveAlertsConfig(cfg);
+  buildAlertsSection();
 }
 function sendClientReportNow(cid) {
   var cfg = loadAlertsConfig();
@@ -12744,9 +12894,13 @@ function loadAlertsConfig() {
   try {
     var c = JSON.parse(localStorage.getItem(ALERTS_CONFIG_KEY)) || {};
     if (!c.perClient) c.perClient = {};
-    if (!c.adminSummary) c.adminSummary = { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null };
+    if (!c.adminSummary) c.adminSummary = { enabled: false, recipient: '', frequency: 'biweekly', hour: 9, timezone: 'America/Argentina/Buenos_Aires', lastSentAt: null, nextSendAt: null };
+    // Backfill defaults for old configs
+    if (!c.adminSummary.frequency) c.adminSummary.frequency = 'biweekly';
+    if (!c.adminSummary.hour)      c.adminSummary.hour = 9;
+    if (!c.adminSummary.timezone)  c.adminSummary.timezone = 'America/Argentina/Buenos_Aires';
     return c;
-  } catch(e) { return { perClient: {}, adminSummary: { enabled: false, recipient: '', lastSentAt: null, nextSendAt: null } }; }
+  } catch(e) { return { perClient: {}, adminSummary: { enabled: false, recipient: '', frequency: 'biweekly', hour: 9, timezone: 'America/Argentina/Buenos_Aires', lastSentAt: null, nextSendAt: null } }; }
 }
 function saveAlertsConfig(cfg) {
   try { localStorage.setItem(ALERTS_CONFIG_KEY, JSON.stringify(cfg)); } catch(e) {}
@@ -12789,6 +12943,120 @@ function addDays(dateIso, days) {
 function fmtDateShort(iso) {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }); } catch(e) { return iso; }
+}
+
+// ── Timezones ─────────────────────────────────────────────────
+var COMMON_TIMEZONES = [
+  { id: 'America/Argentina/Buenos_Aires', label: 'Argentina (Buenos Aires)' },
+  { id: 'America/Santiago',               label: 'Chile (Santiago)' },
+  { id: 'America/Mexico_City',            label: 'México (CDMX)' },
+  { id: 'America/Bogota',                 label: 'Colombia (Bogotá)' },
+  { id: 'America/Lima',                   label: 'Perú (Lima)' },
+  { id: 'America/Sao_Paulo',              label: 'Brasil (São Paulo)' },
+  { id: 'America/Caracas',                label: 'Venezuela (Caracas)' },
+  { id: 'America/New_York',               label: 'USA East (Nueva York)' },
+  { id: 'America/Chicago',                label: 'USA Central (Chicago)' },
+  { id: 'America/Los_Angeles',            label: 'USA Pacific (Los Angeles)' },
+  { id: 'Europe/Madrid',                  label: 'España (Madrid)' },
+  { id: 'Europe/London',                  label: 'Reino Unido (Londres)' },
+  { id: 'Europe/Berlin',                  label: 'Alemania (Berlín)' },
+  { id: 'Europe/Paris',                   label: 'Francia (París)' },
+  { id: 'Asia/Shanghai',                  label: 'China (Shanghai)' },
+  { id: 'Asia/Tokyo',                     label: 'Japón (Tokyo)' },
+];
+function renderTimezoneOptions(selectedId) {
+  var html = '';
+  COMMON_TIMEZONES.forEach(function(tz) {
+    var sel = (selectedId === tz.id) ? ' selected' : '';
+    html += '<option value="' + escAttr(tz.id) + '"' + sel + '>' + escHtml(tz.label) + '</option>';
+  });
+  // If user has a TZ not in our list, add it at end
+  if (selectedId && !COMMON_TIMEZONES.find(function(tz) { return tz.id === selectedId; })) {
+    html += '<option value="' + escAttr(selectedId) + '" selected>' + escHtml(selectedId) + '</option>';
+  }
+  return html;
+}
+function getTimezoneLabel(tzId) {
+  var found = COMMON_TIMEZONES.find(function(tz) { return tz.id === tzId; });
+  return found ? found.label : (tzId || 'Argentina (Buenos Aires)');
+}
+// Compute the current UTC offset (minutes) of a TZ at a given date.
+// e.g. for Argentina (UTC-3) returns -180.
+function tzOffsetMinutes(tzId, date) {
+  try {
+    var dtf = new Intl.DateTimeFormat('en-US', { timeZone: tzId, timeZoneName: 'longOffset' });
+    var parts = dtf.formatToParts(date || new Date());
+    var off = parts.find(function(p) { return p.type === 'timeZoneName'; });
+    if (!off) return 0;
+    var m = off.value.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+    if (!m) return 0;
+    var sign = m[1] === '-' ? -1 : 1;
+    return sign * (parseInt(m[2], 10) * 60 + parseInt(m[3] || '0', 10));
+  } catch(e) { return 0; }
+}
+// Returns date components (year/month/day/weekday/hour) of the current moment IN a given TZ.
+function nowInTimezone(tzId, date) {
+  var d = date || new Date();
+  var dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tzId, weekday: 'short', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  var parts = dtf.formatToParts(d);
+  var get = function(type) { var p = parts.find(function(x) { return x.type === type; }); return p ? p.value : null; };
+  var wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: parseInt(get('year'), 10),
+    month: parseInt(get('month'), 10),
+    day: parseInt(get('day'), 10),
+    hour: parseInt(get('hour'), 10),
+    minute: parseInt(get('minute'), 10),
+    weekday: wdMap[get('weekday')],
+  };
+}
+// Compute the next Monday at `hour`:00 in `tzId`. Returns ISO UTC string.
+// If frequency is 'biweekly', skips a Monday based on lastSentAtIso.
+function computeNextSendAt(tzId, hour, frequency, lastSentAtIso) {
+  var now = new Date();
+  var nowTz = nowInTimezone(tzId, now);
+  // Days until next Monday (1 = Monday)
+  var daysUntilMon;
+  if (nowTz.weekday === 1 && nowTz.hour < hour) {
+    daysUntilMon = 0; // today is Monday, before scheduled hour
+  } else {
+    daysUntilMon = (1 - nowTz.weekday + 7) % 7;
+    if (daysUntilMon === 0) daysUntilMon = 7;
+  }
+  // Build target date in TZ
+  var targetTzMs = Date.UTC(nowTz.year, nowTz.month - 1, nowTz.day, hour, 0, 0);
+  var todayTzMs  = Date.UTC(nowTz.year, nowTz.month - 1, nowTz.day, 0, 0, 0);
+  // Difference between target moment (TZ-local) and now (TZ-local)
+  var nowTzMs = Date.UTC(nowTz.year, nowTz.month - 1, nowTz.day, nowTz.hour, nowTz.minute, 0);
+  var targetLocalMs = targetTzMs + (daysUntilMon * 86400000);
+  // Apply biweekly: if last sent < 13 days ago, push +7 days
+  if (frequency === 'biweekly' && lastSentAtIso) {
+    var lastMs = new Date(lastSentAtIso).getTime();
+    if ((targetLocalMs + (now.getTime() - nowTzMs)) - lastMs < 13 * 86400000) {
+      targetLocalMs += 7 * 86400000;
+    }
+  }
+  // Convert "9am in TZ" to UTC: utc = local - offset
+  var offMin = tzOffsetMinutes(tzId, new Date(targetLocalMs));
+  var utcMs = targetLocalMs - offMin * 60000;
+  return new Date(utcMs).toISOString();
+}
+// Format an ISO date as "lunes 8 jun, 09:00 (Argentina)"
+function formatNextSendFriendly(isoUtc, tzId) {
+  if (!isoUtc) return '—';
+  try {
+    var d = new Date(isoUtc);
+    var fmt = new Intl.DateTimeFormat('es-AR', {
+      timeZone: tzId,
+      weekday: 'long', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    var parts = fmt.format(d);
+    return parts + ' (' + getTimezoneLabel(tzId).split(' ')[0] + ')';
+  } catch(e) { return isoUtc.slice(0, 16).replace('T', ' '); }
 }
 
 // Default card metrics per platform (when client has no custom config)
@@ -12849,10 +13117,17 @@ function showClientWizardModal(editingId) {
     html += '<div style="background:rgba(255,140,66,0.10);border:1px solid rgba(255,140,66,0.3);color:#FF8C42;font-size:11.5px;padding:10px 14px;border-radius:8px;margin-bottom:14px;">⚠ ' + t('clients.wiz.runDiscoveryFirst') + '</div>';
   }
 
-  // Name
-  html += '<div class="invite-field">';
-  html += '  <label>' + t('clients.wiz.name') + '</label>';
-  html += '  <input type="text" id="cw-name" placeholder="' + escAttr(t('clients.wiz.namePh')) + '" value="' + escAttr(existing ? (existing.clientName || '') : '') + '" />';
+  // Name + Timezone (en grid de 2 columnas)
+  var existingTz = (existing && existing.timezone) || 'America/Argentina/Buenos_Aires';
+  html += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">';
+  html += '  <div class="invite-field">';
+  html += '    <label>' + t('clients.wiz.name') + '</label>';
+  html += '    <input type="text" id="cw-name" placeholder="' + escAttr(t('clients.wiz.namePh')) + '" value="' + escAttr(existing ? (existing.clientName || '') : '') + '" />';
+  html += '  </div>';
+  html += '  <div class="invite-field">';
+  html += '    <label>🌐 ' + t('clients.wiz.timezone') + '</label>';
+  html += '    <select id="cw-timezone" class="cw-select">' + renderTimezoneOptions(existingTz) + '</select>';
+  html += '  </div>';
   html += '</div>';
 
   // Meta select
@@ -13053,6 +13328,10 @@ function saveClientFromWizard(editingId) {
   var igBusinessId = (igBizEl && igBizEl.value || '').trim();
   var fbPageId     = (fbPgEl  && fbPgEl.value  || '').trim();
 
+  // Recolectar zona horaria
+  var tzEl = document.getElementById('cw-timezone');
+  var timezone = (tzEl && tzEl.value || 'America/Argentina/Buenos_Aires').trim();
+
   if (editingId) {
     // Update existing
     var extras = loadExtraAccounts();
@@ -13068,7 +13347,8 @@ function saveClientFromWizard(editingId) {
       handles:       handles,
       platforms:     platforms.length ? platforms : (existing.platforms || []),
       igBusinessId:  igBusinessId || null,
-      fbPageId:      fbPageId     || null
+      fbPageId:      fbPageId     || null,
+      timezone:      timezone
     });
     USERS[editingId] = updated;
     extras[editingId] = {
@@ -13082,7 +13362,8 @@ function saveClientFromWizard(editingId) {
       cardMetrics:   cardMetrics,
       iaContext:     iaContext,
       igBusinessId:  updated.igBusinessId,
-      fbPageId:      updated.fbPageId
+      fbPageId:      updated.fbPageId,
+      timezone:      timezone
     };
     saveExtraAccounts(extras);
     if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('clients.wiz.updated', name));
@@ -13103,7 +13384,8 @@ function saveClientFromWizard(editingId) {
       cardMetrics:   cardMetrics,
       iaContext:     iaContext,
       igBusinessId:  igBusinessId || null,
-      fbPageId:      fbPageId     || null
+      fbPageId:      fbPageId     || null,
+      timezone:      timezone
     };
     var extras2 = loadExtraAccounts();
     extras2[userId] = entry;
@@ -14786,6 +15068,15 @@ var TRANSLATIONS = {
   'alerts.testEnqueued':         { es: 'Test encolado a {0}', en: 'Test queued to {0}', pt: 'Teste enfileirado para {0}', de: 'Test in Warteschlange für {0}', zh: '测试已排队发送至 {0}' },
   'alerts.errors.noRecipient':   { es: 'Falta el email destinatario', en: 'Recipient email is missing', pt: 'Email destinatário ausente', de: 'Empfänger-E-Mail fehlt', zh: '缺少收件人邮箱' },
   'alerts.errors.notConnected':  { es: 'Conectá tu Gmail primero', en: 'Connect your Gmail first', pt: 'Conecte seu Gmail primeiro', de: 'Gmail zuerst verbinden', zh: '首先连接 Gmail' },
+  'alerts.field.frequency':      { es: 'Frecuencia', en: 'Frequency', pt: 'Frequência', de: 'Häufigkeit', zh: '频率' },
+  'alerts.field.hour':           { es: 'Hora', en: 'Time', pt: 'Hora', de: 'Uhrzeit', zh: '时间' },
+  'alerts.field.recipient':      { es: 'Email destinatario', en: 'Recipient email', pt: 'Email destinatário', de: 'Empfänger-E-Mail', zh: '收件人邮箱' },
+  'alerts.field.timezone':       { es: 'Zona horaria', en: 'Timezone', pt: 'Fuso horário', de: 'Zeitzone', zh: '时区' },
+  'alerts.freq.weekly':          { es: 'Todos los lunes', en: 'Every Monday', pt: 'Todas as segundas', de: 'Jeden Montag', zh: '每周一' },
+  'alerts.freq.biweekly':        { es: 'Lunes por medio (quincenal)', en: 'Every other Monday', pt: 'Cada duas segundas', de: 'Jeden zweiten Montag', zh: '每隔一周一' },
+  'alerts.nextSend':             { es: 'Próximo envío: {0}', en: 'Next send: {0}', pt: 'Próximo envio: {0}', de: 'Nächster Versand: {0}', zh: '下次发送: {0}' },
+  'alerts.sendTest':             { es: 'Enviar test ahora', en: 'Send test now', pt: 'Enviar teste agora', de: 'Test jetzt senden', zh: '立即发送测试' },
+  'clients.wiz.timezone':        { es: 'Zona horaria', en: 'Timezone', pt: 'Fuso horário', de: 'Zeitzone', zh: '时区' },
   'report.editClient':           { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
 
   // Filter por responsable
