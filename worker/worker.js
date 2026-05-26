@@ -226,28 +226,20 @@ async function handleGmailSend(request, env, corsHdrs) {
     return json({ error: 'Missing fields: to, subject, html|text' }, 400, corsHdrs);
   }
 
-  // Decide credentials:
-  // mode === 'admin' (default) → use pre-configured GMAIL_* secrets
-  // mode === 'user'             → use refresh_token from body (member's own Gmail)
-  let clientId, clientSecret, refreshToken, fromEmail;
-  if (mode === 'user') {
-    if (!body.refresh_token) return json({ error: 'Missing refresh_token for user mode' }, 400, corsHdrs);
-    if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-      return json({ error: 'GMAIL_CLIENT_ID/SECRET not configured in Worker' }, 500, corsHdrs);
-    }
-    clientId = env.GMAIL_CLIENT_ID;
-    clientSecret = env.GMAIL_CLIENT_SECRET;
-    refreshToken = body.refresh_token;
-    fromEmail = body.from_email || 'me';
-  } else {
-    if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-      return json({ error: 'GMAIL secrets not configured in Worker' }, 500, corsHdrs);
-    }
-    clientId = env.GMAIL_CLIENT_ID;
-    clientSecret = env.GMAIL_CLIENT_SECRET;
-    refreshToken = env.GMAIL_REFRESH_TOKEN;
-    fromEmail = 'matiasdesiderio@gmail.com';
+  // SOLO mode='user' está permitido. El path 'admin' (con GMAIL_REFRESH_TOKEN) se
+  // deshabilitó por seguridad — cualquiera con la URL del Worker no debe poder
+  // mandar mails desde el Gmail del dueño original al clonar la app.
+  if (mode !== 'user') {
+    return json({ error: 'Only mode="user" is supported. Connect your Gmail via OAuth first.' }, 400, corsHdrs);
   }
+  if (!body.refresh_token) return json({ error: 'Missing refresh_token for user mode' }, 400, corsHdrs);
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+    return json({ error: 'GMAIL_CLIENT_ID/SECRET not configured in Worker' }, 500, corsHdrs);
+  }
+  const clientId = env.GMAIL_CLIENT_ID;
+  const clientSecret = env.GMAIL_CLIENT_SECRET;
+  const refreshToken = body.refresh_token;
+  const fromEmail = body.from_email || 'me';
 
   let accessToken;
   try { accessToken = await getGmailAccessToken(env, refreshToken, clientId, clientSecret); }

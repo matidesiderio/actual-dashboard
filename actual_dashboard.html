@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-26-admin-oauth-v11', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-26-oauth-only-v12', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12129,23 +12129,15 @@ function buildAlertsSection() {
   // ── BLOQUE 1 — Mi conexión Gmail ───────────────────────────
   h += '<div class="alerts-block">';
   h += '  <div class="alerts-block-title">📧 ' + t('alerts.myGmail.title') + '</div>';
-  if (conn.connected) {
+  if (conn.connected && conn.source === 'oauth') {
     h += '  <div class="alerts-conn-row connected">';
     h += '    <span class="alerts-conn-icon">✓</span>';
     h += '    <div class="alerts-conn-info">';
     h += '      <div class="alerts-conn-email">' + escHtml(conn.email) + '</div>';
-    h += '      <div class="alerts-conn-source">' + (conn.source === 'preconfigured' ? t('alerts.myGmail.preconfigured') : t('alerts.myGmail.userConnected')) + '</div>';
+    h += '      <div class="alerts-conn-source">' + t('alerts.myGmail.userConnected') + '</div>';
     h += '    </div>';
-    if (conn.source === 'preconfigured') {
-      // Admin usando token preconfigurado → ofrecer OAuth como alternativa "real"
-      h += '    <button class="alerts-conn-btn" onclick="connectMyGmail()">🔗 ' + t('alerts.myGmail.connectOAuth') + '</button>';
-    } else {
-      h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGmail()">' + t('alerts.myGmail.disconnect') + '</button>';
-    }
+    h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGmail()">' + t('alerts.myGmail.disconnect') + '</button>';
     h += '  </div>';
-    if (conn.source === 'preconfigured') {
-      h += '  <div class="alerts-hint" style="margin-top:10px;margin-bottom:0;">💡 ' + t('alerts.myGmail.preconfiguredHint') + '</div>';
-    }
   } else {
     h += '  <div class="alerts-conn-row">';
     h += '    <div class="alerts-conn-info">';
@@ -12188,8 +12180,8 @@ function buildAlertsSection() {
     });
     h += '      </select>';
     h += '    </div>';
-    // Auto-fill destinatario admin con el email del OAuth si está conectado
-    var adminDefaultEmail = (conn && conn.email) ? conn.email : 'matiasdesiderio@gmail.com';
+    // Auto-fill destinatario admin con el email del OAuth conectado
+    var adminDefaultEmail = (conn && conn.email) ? conn.email : '';
     var adminRecipient = as.recipient || adminDefaultEmail;
     h += '    <div class="alerts-field" style="grid-column:span 2;">';
     h += '      <label>' + t('alerts.adminSummary.recipient') + ' <span style="font-size:10.5px;color:var(--gray);font-weight:400;">(' + t('alerts.adminSummary.recipientHint') + ')</span></label>';
@@ -12376,22 +12368,21 @@ function updateAdminSummaryTz(v) {
 function buildGmailSendBody(to, subject, html, opts) {
   opts = opts || {};
   var conn = getMyGmailConnection();
+  if (!conn.connected || conn.source !== 'oauth' || !conn.refresh_token) {
+    throw new Error('No Gmail OAuth connection. Conectá tu Gmail primero.');
+  }
   var body = {
     to: to,
     subject: subject,
     html: html,
-    fromName: 'Actual Comunicaciones'
+    fromName: 'Actual Comunicaciones',
+    mode: 'user',
+    refresh_token: conn.refresh_token,
+    from_email: conn.email
   };
-  if (conn.source === 'oauth' && conn.refresh_token) {
-    body.mode = 'user';
-    body.refresh_token = conn.refresh_token;
-    body.from_email = conn.email;
-  } else {
-    body.mode = 'admin';
-  }
   // BCC al sender para tener copia oculta — siempre que el destinatario NO sea ya el sender
   if (opts.alwaysBccSender) {
-    var senderEmail = conn.email || 'matiasdesiderio@gmail.com';
+    var senderEmail = conn.email;
     if (senderEmail && senderEmail.toLowerCase() !== (to || '').toLowerCase()) {
       body.bcc = senderEmail;
     }
@@ -13215,17 +13206,13 @@ function currentUserKey() {
   return 'admin';
 }
 // Gmail connection for the current user.
-// 1) Si el user hizo OAuth → usar esa (vive en localStorage actual_gmail_connections)
-// 2) Si no, y es admin → usar la preconfigurada (Worker secrets)
-// 3) Otro usuario sin OAuth → no conectado
+// SIEMPRE requiere OAuth — sin fallback preconfigurado.
+// Esto evita que usuarios nuevos (o app clonada) usen credenciales del dev original.
 function getMyGmailConnection() {
   var key = currentUserKey();
   var map = loadGmailConnections();
   if (map[key] && map[key].refresh_token) {
-    return map[key]; // OAuth real del usuario
-  }
-  if (key === 'admin') {
-    return { connected: true, email: 'matiasdesiderio@gmail.com', source: 'preconfigured' };
+    return map[key]; // OAuth del usuario, único path válido
   }
   return { connected: false, email: '', source: null };
 }
