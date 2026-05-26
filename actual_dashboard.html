@@ -3297,6 +3297,26 @@
     }
     .cw-metric-chk:hover { color: var(--white); }
     .cw-metric-chk input { cursor: pointer; accent-color: var(--lime); }
+
+    /* Contexto IA — textarea */
+    .cw-ia-hint {
+      font-size: 11.5px; color: var(--gray); line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .cw-ia-textarea {
+      width: 100%; min-height: 140px;
+      background: var(--surface-2); color: var(--white);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; font-size: 12.5px;
+      font-family: 'Inter', sans-serif; line-height: 1.55;
+      resize: vertical;
+    }
+    .cw-ia-textarea:focus { outline: none; border-color: var(--lime); }
+    .cw-ia-counter {
+      font-size: 10px; color: var(--gray); text-align: right; margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    [data-theme="light"] .cw-ia-textarea { background: #FFFFFF; color: #1a1a1a; }
     .conn-item:hover { border-color: var(--lime); }
     .conn-item.hidden   { opacity: 0.55; }
     .conn-item.archived { opacity: 0.4; }
@@ -8704,12 +8724,18 @@ async function callOpenAI(messages) {
     if (!apiKey || apiKey === '__PROXY__') throw new Error('Missing Anthropic API key');
   }
 
-  // Anthropic expects "system" separate from messages, plain string format
-  let systemMsg = '';
+  // Anthropic system messages — support array form for prompt caching.
+  // Each `{role:'system'}` message can carry an optional `cache: true` flag → marked as ephemeral.
+  const sysBlocks = [];
   const userMsgs = [];
   messages.forEach(m => {
-    if (m.role === 'system') systemMsg = (systemMsg ? systemMsg + '\n\n' : '') + m.content;
-    else userMsgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content });
+    if (m.role === 'system') {
+      const blk = { type: 'text', text: m.content };
+      if (m.cache) blk.cache_control = { type: 'ephemeral' };
+      sysBlocks.push(blk);
+    } else {
+      userMsgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content });
+    }
   });
 
   const body = {
@@ -8717,7 +8743,11 @@ async function callOpenAI(messages) {
     max_tokens: 1024,
     messages: userMsgs.length ? userMsgs : [{ role: 'user', content: '' }],
   };
-  if (systemMsg) body.system = systemMsg;
+  if (sysBlocks.length === 1 && !sysBlocks[0].cache_control) {
+    body.system = sysBlocks[0].text; // simple string (backward-compat)
+  } else if (sysBlocks.length >= 1) {
+    body.system = sysBlocks; // structured array (enables prompt caching)
+  }
 
   const headers = USE_PROXY ? { 'Content-Type': 'application/json' } : {
     'Content-Type': 'application/json',
@@ -8738,7 +8768,20 @@ async function callOpenAI(messages) {
     throw new Error('Anthropic error ' + res.status + ': ' + errText);
   }
   const data = await res.json();
+  // Cache stats (debug only — no efecto funcional)
+  if (data.usage && (data.usage.cache_creation_input_tokens || data.usage.cache_read_input_tokens)) {
+    console.log('[Claudia] prompt cache:', data.usage);
+  }
   return (data.content && data.content[0] && data.content[0].text) || '';
+}
+
+// Per-client IA context (memoria/contexto que se mantiene entre análisis).
+// Stored in localStorage under `extras[userId].iaContext`.
+function getClientIaContext(userId) {
+  if (!userId) return '';
+  var u = USERS[userId];
+  if (u && typeof u.iaContext === 'string') return u.iaContext;
+  return '';
 }
 
 // ============================================================
@@ -8861,13 +8904,37 @@ async function sendAiChat() {
   appendAiChatMsg(msg, 'user');
 
   var ctx = buildAiChatContext();
-  var systemPrompt = 'Sos un analista de paid media especializado. Tenés acceso EXCLUSIVO a los datos de campañas que el usuario está viendo ahora mismo.\n\nREGLAS ESTRICTAS:\n- Solo respondés preguntas directamente relacionadas con los datos que se te proveen\n- NO das consejos generales de marketing ni estrategias genéricas\n- NO sugerís contenido, creatividades ni ideas de publicación\n- NO inventás datos ni estimás métricas que no estén en los datos\n- Si algo no está en los datos, decís claramente "no tengo esa información en los datos actuales"\n- Respondés en español, de forma concisa (máximo 3-4 oraciones por respuesta)\n- Si ves una anomalía relevante a la pregunta, la mencionás con el dato exacto\n- Usás números concretos de los datos, no generalidades\n\nDatos actuales:\n' + JSON.stringify(ctx.data || ctx, null, 0).slice(0, 3500);
+
+  // Stable system block (cacheable): personality + rules + per-client context.
+  var stableSystem = 'Sos un analista de paid media especializado. Tenés acceso EXCLUSIVO a los datos de campañas que el usuario está viendo ahora mismo.\n\nREGLAS ESTRICTAS:\n- Solo respondés preguntas directamente relacionadas con los datos que se te proveen\n- NO das consejos generales de marketing ni estrategias genéricas\n- NO sugerís contenido, creatividades ni ideas de publicación\n- NO inventás datos ni estimás métricas que no estén en los datos\n- Si algo no está en los datos, decís claramente "no tengo esa información en los datos actuales"\n- Respondés en español, de forma concisa (máximo 3-4 oraciones por respuesta)\n- Si ves una anomalía relevante a la pregunta, la mencionás con el dato exacto\n- Usás números concretos de los datos, no generalidades';
+
+  // Inject per-client memory if we're viewing a single client
+  var currentUserId = (APP.config && APP.config.userId) || null;
+  var iaContext = currentUserId ? getClientIaContext(currentUserId) : '';
+  if (iaContext) {
+    var clientName = (APP.config && APP.config.clientName) || currentUserId;
+    stableSystem += '\n\nCONTEXTO DEL CLIENTE — ' + clientName + ' (memoria persistente):\n' + iaContext +
+      '\n\nUsá este contexto del negocio cuando interpretes los datos. Si una métrica parece "fuera de rango" pero coincide con el perfil del cliente (audiencia premium, estacionalidad, restricciones, etc.), explicalo en tu análisis. Si recomendás algo, alinealo con los objetivos y restricciones declarados.';
+  }
+
+  // Variable system block (not cached): current period data.
+  var variableSystem = 'Datos actuales:\n' + JSON.stringify(ctx.data || ctx, null, 0).slice(0, 3500);
 
   aiChatHistory.push({ role: 'user', content: msg });
   var typingEl = appendAiChatMsg('…', 'ai typing');
 
   try {
-    var messages = [{ role: 'system', content: systemPrompt }].concat(aiChatHistory.slice(-12));
+    // System split en 2 bloques: stable (cached) + variable (per-request).
+    // Solo activamos cache si el bloque estable es razonable (>500 chars) para evitar
+    // overhead de cache en prompts chicos donde el ahorro no compensa.
+    var messages = [];
+    if (stableSystem.length > 500) {
+      messages.push({ role: 'system', content: stableSystem, cache: true });
+      messages.push({ role: 'system', content: variableSystem });
+    } else {
+      messages.push({ role: 'system', content: stableSystem + '\n\n' + variableSystem });
+    }
+    messages = messages.concat(aiChatHistory.slice(-12));
     var reply = await callOpenAI(messages);
     typingEl.textContent = reply;
     typingEl.classList.remove('typing');
@@ -9329,15 +9396,17 @@ function applyExtraAccountsToUSERS() {
     if (USERS[id]) return; // never overwrite a hardcoded entry
     var e = extras[id];
     USERS[id] = {
-      password:   e.password || ('temp' + Math.random().toString(36).slice(2, 6)),
-      clientName: e.clientName || id,
-      logo:       e.logo || (e.clientName || id).substring(0, 2).toUpperCase(),
-      platforms:  e.platforms || ['ig'],
-      handles:    e.handles || {},
-      metaAccId:  e.metaAccId || null,
-      googleId:   e.googleId  || null,
-      currency:   e.currency  || 'ARS',
-      _extra:     true,
+      password:    e.password || ('temp' + Math.random().toString(36).slice(2, 6)),
+      clientName:  e.clientName || id,
+      logo:        e.logo || (e.clientName || id).substring(0, 2).toUpperCase(),
+      platforms:   e.platforms || ['ig'],
+      handles:     e.handles || {},
+      metaAccId:   e.metaAccId || null,
+      googleId:    e.googleId  || null,
+      currency:    e.currency  || 'ARS',
+      cardMetrics: e.cardMetrics || null,
+      iaContext:   e.iaContext  || '',
+      _extra:      true,
     };
   });
 }
@@ -9391,7 +9460,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-20-editClient-v3-drawer', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-21-iaContext-v4-caching', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12439,6 +12508,17 @@ function showClientWizardModal(editingId) {
   html += '  </select>';
   html += '</div>';
 
+  // ── Contexto IA (memoria persistente para Claudia) ────────
+  var currentIaCtx = editingId ? getClientIaContext(editingId) : '';
+  html += '<details class="cw-metrics-details" style="margin-top:14px;" ' + (currentIaCtx ? 'open' : '') + '>';
+  html += '  <summary class="cw-metrics-summary">🧠 ' + t('clients.wiz.iaContextTitle') + ' <span class="cw-metrics-hint">(' + t('clients.wiz.iaContextHint') + ')</span></summary>';
+  html += '  <div style="padding:10px 16px 14px;border-top:1px solid var(--border);">';
+  html += '    <div class="cw-ia-hint">' + t('clients.wiz.iaContextHelp') + '</div>';
+  html += '    <textarea id="cw-iacontext" class="cw-ia-textarea" maxlength="4000" placeholder="' + escAttr(t('clients.wiz.iaContextPh')) + '">' + escHtml(currentIaCtx) + '</textarea>';
+  html += '    <div class="cw-ia-counter" id="cw-iacontext-counter">' + currentIaCtx.length + ' / 4000</div>';
+  html += '  </div>';
+  html += '</details>';
+
   // ── Métricas a mostrar (colapsable) ───────────────────────
   var currentMetrics = getCardMetricsForUser(editingId || '__new__');
   var allMetricsDef = [
@@ -12482,6 +12562,15 @@ function showClientWizardModal(editingId) {
 
   m.querySelector('.invite-modal-wrap').innerHTML = html;
   m.classList.add('visible');
+
+  // Live counter for the IA context textarea
+  var iaCtxEl = document.getElementById('cw-iacontext');
+  var iaCntEl = document.getElementById('cw-iacontext-counter');
+  if (iaCtxEl && iaCntEl) {
+    iaCtxEl.addEventListener('input', function() {
+      iaCntEl.textContent = iaCtxEl.value.length + ' / 4000';
+    });
+  }
 }
 
 function hideClientWizardModal() {
@@ -12526,6 +12615,10 @@ function saveClientFromWizard(editingId) {
     if (cardMetrics[plat]) cardMetrics[plat].push(met);
   });
 
+  // Recolectar contexto IA
+  var iaCtxEl  = document.getElementById('cw-iacontext');
+  var iaContext = (iaCtxEl && iaCtxEl.value || '').trim();
+
   if (editingId) {
     // Update existing
     var extras = loadExtraAccounts();
@@ -12536,7 +12629,8 @@ function saveClientFromWizard(editingId) {
       metaAccId:   metaId || null,
       googleId:    gId    || null,
       currency:    currency,
-      cardMetrics: cardMetrics
+      cardMetrics: cardMetrics,
+      iaContext:   iaContext
     });
     USERS[editingId] = updated;
     extras[editingId] = {
@@ -12547,7 +12641,8 @@ function saveClientFromWizard(editingId) {
       metaAccId:   updated.metaAccId,
       googleId:    updated.googleId,
       currency:    updated.currency,
-      cardMetrics: cardMetrics
+      cardMetrics: cardMetrics,
+      iaContext:   iaContext
     };
     saveExtraAccounts(extras);
     if (typeof adminShowToast === 'function') adminShowToast('✓ ' + tf('clients.wiz.updated', name));
@@ -12565,7 +12660,8 @@ function saveClientFromWizard(editingId) {
       metaAccId:   metaId || null,
       googleId:    gId    || null,
       currency:    currency,
-      cardMetrics: cardMetrics
+      cardMetrics: cardMetrics,
+      iaContext:   iaContext
     };
     var extras2 = loadExtraAccounts();
     extras2[userId] = entry;
@@ -14213,6 +14309,10 @@ var TRANSLATIONS = {
   'clients.wiz.errPlatformRequired': { es: 'Tenés que vincular al menos una plataforma (Meta o Google)', en: 'You must link at least one platform (Meta or Google)', pt: 'Vincule ao menos uma plataforma', de: 'Mindestens eine Plattform verknüpfen', zh: '至少需要关联一个平台' },
   'clients.wiz.metricsTitle':    { es: 'Métricas a mostrar', en: 'Metrics to show', pt: 'Métricas para mostrar', de: 'Anzuzeigende Metriken', zh: '要显示的指标' },
   'clients.wiz.metricsHint':     { es: 'opcional — por defecto se muestran todas', en: 'optional — defaults to all', pt: 'opcional — todas por padrão', de: 'optional — Standard: alle', zh: '可选 — 默认全部' },
+  'clients.wiz.iaContextTitle':  { es: 'Contexto del cliente para Claudia', en: 'Client context for Claudia', pt: 'Contexto do cliente para Claudia', de: 'Kundenkontext für Claudia', zh: 'Claudia 的客户上下文' },
+  'clients.wiz.iaContextHint':   { es: 'memoria persistente para análisis IA', en: 'persistent memory for AI analysis', pt: 'memória persistente para IA', de: 'persistenter Speicher für KI', zh: 'AI 分析的持久记忆' },
+  'clients.wiz.iaContextHelp':   { es: 'Cargá info del negocio: objetivos, audiencia, budget, estacionalidad, restricciones, KPIs prioritarios. Claudia lo usa cada vez que analiza este cliente y entiende sus métricas en el contexto correcto.', en: 'Add business info: goals, audience, budget, seasonality, restrictions, priority KPIs. Claudia uses this whenever it analyzes this client.', pt: 'Carregue info do negócio: objetivos, audiência, budget, sazonalidade, restrições, KPIs prioritários.', de: 'Geschäftsinfo eingeben: Ziele, Zielgruppe, Budget, Saisonalität, Einschränkungen, KPIs.', zh: '添加业务信息: 目标、受众、预算、季节性、限制、优先 KPI。' },
+  'clients.wiz.iaContextPh':     { es: 'Ej:\n🎯 Objetivo: vender ropa premium online, +35% YoY\n👥 Audiencia: mujeres 28-45, AMBA, NSE alto\n💰 Budget mensual: $800k Meta + $400k Google\n📅 Estacionalidad: pico en junio (día madre) y diciembre\n📊 KPIs prioritarios: ROAS > 4, CPL < $2000\n⚠️ Restricciones: no mostrar precios en creativos', en: 'E.g.:\n🎯 Goal: sell premium clothing online, +35% YoY\n👥 Audience: women 28-45...', pt: 'Ex: ...', de: 'Z.B.: ...', zh: '例如：...' },
   'report.editClient':           { es: '✏️ Editar cliente', en: '✏️ Edit client', pt: '✏️ Editar cliente', de: '✏️ Kunde bearbeiten', zh: '✏️ 编辑客户' },
 
   // Filter por responsable
