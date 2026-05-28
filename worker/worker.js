@@ -54,6 +54,9 @@ export default {
       if (path === '/gmail/oauth/callback') {
         return await handleGmailOAuthCallback(request, env, url);
       }
+      if (path === '/gmail/oauth/poll') {
+        return await handleGmailOAuthPoll(request, env, url, corsHdrs);
+      }
       return json({ error: 'Unknown route', path }, 404, corsHdrs);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500, corsHdrs);
@@ -300,10 +303,31 @@ async function handleGmailSend(request, env, corsHdrs) {
 }
 
 // ── Gmail OAuth flow (popup-based for in-app connection) ─────
+// Helpers para guardar/leer el resultado OAuth server-side usando Cache API
+// (no requiere setup de KV; cache es per-colo y el mismo usuario pega al mismo colo).
+function _oauthCacheKey(session) {
+  return new Request('https://oauth-store.internal/session/' + encodeURIComponent(session));
+}
+async function _oauthStore(session, data) {
+  const cache = caches.default;
+  await cache.put(_oauthCacheKey(session), new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' }
+  }));
+}
+async function _oauthRetrieve(session) {
+  const cache = caches.default;
+  const hit = await cache.match(_oauthCacheKey(session));
+  if (!hit) return null;
+  const data = await hit.json();
+  await cache.delete(_oauthCacheKey(session));
+  return data;
+}
+
 async function handleGmailOAuthStart(request, env, url) {
   if (!env.GMAIL_CLIENT_ID) {
     return new Response('GMAIL_CLIENT_ID secret not configured', { status: 500 });
   }
+  const session = url.searchParams.get('session') || '';
   const callbackUrl = `${url.origin}/gmail/oauth/callback`;
   const params = new URLSearchParams({
     client_id: env.GMAIL_CLIENT_ID,
@@ -312,39 +336,44 @@ async function handleGmailOAuthStart(request, env, url) {
     scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
     access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true'
+    include_granted_scopes: 'true',
+    state: session  // thread session para recuperar el resultado por polling
   });
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
   return Response.redirect(authUrl, 302);
 }
 
+async function handleGmailOAuthPoll(request, env, url, corsHdrs) {
+  const session = url.searchParams.get('session') || '';
+  if (!session) return json({ error: 'Missing session' }, 400, corsHdrs);
+  const data = await _oauthRetrieve(session);
+  if (!data) return json({ pending: true }, 200, corsHdrs);
+  return json({ pending: false, success: !!data.refresh_token, email: data.email || '', refresh_token: data.refresh_token || '', error: data.error || '' }, 200, corsHdrs);
+}
+
 async function handleGmailOAuthCallback(request, env, url) {
   const code  = url.searchParams.get('code');
   const error = url.searchParams.get('error');
+  const session = url.searchParams.get('state') || '';  // = session que pasamos en /start
 
-  // Bridge page URL (same origin as dashboard) — desde ahí postMessage funciona
-  // porque GitHub Pages no tiene COOP same-origin como sí tiene Google.
+  // Bridge page — solo muestra "podés cerrar esta ventana". Los tokens NO van
+  // en la URL: se guardan server-side y el dashboard los consulta por /poll.
   const BRIDGE_URL = 'https://matidesiderio.github.io/actual-dashboard/oauth-bridge.html';
-
-  function redirectToBridge(params) {
-    // Pasar tokens y status en el URL fragment (no en query — más seguro,
-    // el fragment no se manda al server)
-    const hashParts = [];
-    Object.keys(params).forEach(function(k) {
-      hashParts.push(k + '=' + encodeURIComponent(params[k] == null ? '' : params[k]));
-    });
-    const finalUrl = BRIDGE_URL + '#' + hashParts.join('&');
-    return Response.redirect(finalUrl, 302);
+  function redirectToBridge(statusFlag) {
+    return Response.redirect(BRIDGE_URL + '#status=' + statusFlag, 302);
   }
 
   if (error) {
-    return redirectToBridge({ success: '0', error: 'Google devolvió: ' + error });
+    await _oauthStore(session, { error: 'Google devolvió: ' + error });
+    return redirectToBridge('error');
   }
   if (!code) {
-    return redirectToBridge({ success: '0', error: 'Falta el código de autorización' });
+    await _oauthStore(session, { error: 'Falta el código de autorización' });
+    return redirectToBridge('error');
   }
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    return redirectToBridge({ success: '0', error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
+    await _oauthStore(session, { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
+    return redirectToBridge('error');
   }
 
   // Exchange authorization code for tokens
@@ -361,10 +390,8 @@ async function handleGmailOAuthCallback(request, env, url) {
   });
   const tokens = await tokenRes.json();
   if (!tokens.refresh_token) {
-    return redirectToBridge({
-      success: '0',
-      error: 'Google no devolvió refresh_token (puede que ya hayas autorizado antes — revoca el acceso en https://myaccount.google.com/permissions y volvé a intentar)'
-    });
+    await _oauthStore(session, { error: 'Google no devolvió refresh_token (revocá el acceso en https://myaccount.google.com/permissions y reintentá)' });
+    return redirectToBridge('error');
   }
 
   // Get user's email via userinfo endpoint
@@ -377,11 +404,9 @@ async function handleGmailOAuthCallback(request, env, url) {
     userEmail = ui.email || '';
   } catch(e) { /* ignore */ }
 
-  return redirectToBridge({
-    success: '1',
-    email: userEmail,
-    refresh_token: tokens.refresh_token
-  });
+  // Guardar server-side para que el dashboard lo recupere por /poll
+  await _oauthStore(session, { email: userEmail, refresh_token: tokens.refresh_token });
+  return redirectToBridge('ok');
 }
 
 // ── Anthropic API ──────────────────────────────────────────────
