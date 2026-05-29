@@ -206,13 +206,16 @@ async function getGmailAccessToken(env, refreshToken, clientId, clientSecret) {
   return data.access_token;
 }
 
-// Encode UTF-8 string to base64url (per RFC 4648 §5)
-function toBase64Url(str) {
-  // Encode as UTF-8 bytes, then base64, then convert to base64url
+// Encode UTF-8 string to STANDARD base64 (con + / y padding)
+function toBase64Std(str) {
   const bytes = new TextEncoder().encode(str);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return btoa(binary);
+}
+// Encode UTF-8 string to base64url (per RFC 4648 §5) — para el campo "raw" de Gmail API
+function toBase64Url(str) {
+  return toBase64Std(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function handleGmailSend(request, env, corsHdrs) {
@@ -248,39 +251,21 @@ async function handleGmailSend(request, env, corsHdrs) {
   try { accessToken = await getGmailAccessToken(env, refreshToken, clientId, clientSecret); }
   catch(e) { return json({ error: e.message }, 502, corsHdrs); }
 
-  // Build RFC 2822 MIME message
+  // Build RFC 2822 MIME message (Gmail API espera base64url del RFC822 completo)
   const fromHeader = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-  let mime = '';
-  mime += `From: ${fromHeader}\r\n`;
-  mime += `To: ${to}\r\n`;
-  if (cc)  mime += `Cc: ${cc}\r\n`;
-  if (bcc) mime += `Bcc: ${bcc}\r\n`;
-  mime += `Subject: =?UTF-8?B?${toBase64Url(subject)}?=\r\n`;
-  mime += `MIME-Version: 1.0\r\n`;
-  if (html) {
-    mime += `Content-Type: text/html; charset="UTF-8"\r\n`;
-    mime += `Content-Transfer-Encoding: base64\r\n\r\n`;
-    mime += toBase64Url(html).replace(/-/g, '+').replace(/_/g, '/'); // standard b64 inside body
-    // Actually Gmail accepts the raw value as base64url overall. Let me keep it simple:
-  } else {
-    mime += `Content-Type: text/plain; charset="UTF-8"\r\n\r\n`;
-    mime += text;
-  }
-
-  // Reconstruct simpler MIME without inline b64 (Gmail API expects base64url of full RFC822):
   let raw = '';
   raw += `From: ${fromHeader}\r\n`;
   raw += `To: ${to}\r\n`;
   if (cc)  raw += `Cc: ${cc}\r\n`;
   if (bcc) raw += `Bcc: ${bcc}\r\n`;
-  raw += `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=\r\n`;
+  raw += `Subject: =?UTF-8?B?${toBase64Std(subject)}?=\r\n`;
   raw += `MIME-Version: 1.0\r\n`;
   if (html) {
     raw += `Content-Type: text/html; charset="UTF-8"\r\n\r\n`;
     raw += html;
   } else {
     raw += `Content-Type: text/plain; charset="UTF-8"\r\n\r\n`;
-    raw += text;
+    raw += (text || '');
   }
   const encoded = toBase64Url(raw);
 
