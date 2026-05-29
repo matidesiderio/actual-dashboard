@@ -277,7 +277,12 @@ async function handleGmailSend(request, env, corsHdrs) {
   catch(e) { return json({ error: e.message }, 502, corsHdrs); }
 
   // Build RFC 2822 MIME message (Gmail API espera base64url del RFC822 completo)
-  const fromHeader = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  // Codificar el display name como RFC 2047 si tiene caracteres no-ASCII (ej: "—", acentos)
+  function encodeHeaderWord(s) {
+    if (/^[\x00-\x7F]*$/.test(s)) return s;        // solo ASCII → tal cual
+    return '=?UTF-8?B?' + toBase64Std(s) + '?=';   // con no-ASCII → RFC 2047
+  }
+  const fromHeader = fromName ? `${encodeHeaderWord(fromName)} <${fromEmail}>` : fromEmail;
   let raw = '';
   raw += `From: ${fromHeader}\r\n`;
   raw += `To: ${to}\r\n`;

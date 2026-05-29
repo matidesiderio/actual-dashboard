@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-28-client-email-v20', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-29-encoding-logs-v21', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12485,21 +12485,25 @@ async function sendClientReportNow(cid) {
   if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
 
   adminShowToast('📧 ' + t('alerts.sending'));
+  console.log('[ClientReport] enviando a: ' + recipient + ' | desde: ' + conn.email);
   try {
     var emailBody = buildClientReportHtml(cid);
     var subject = '📊 Reporte quincenal — ' + (u.clientName || cid);
     // Always BCC sender for client reports (vos te quedás con copia)
     var sendBody = buildGmailSendBody(recipient, subject, emailBody, { alwaysBccSender: true });
+    console.log('[ClientReport] body: to=' + sendBody.to + ' bcc=' + (sendBody.bcc||'(ninguno)') + ' mode=' + sendBody.mode);
     var res = await fetch(API_BASE + '/gmail/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sendBody)
     });
     var data = await res.json();
+    console.log('[ClientReport] respuesta Worker:', JSON.stringify(data), '| HTTP', res.status);
     if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
     var bccNote = sendBody.bcc ? ' (' + tf('alerts.bccTo', sendBody.bcc) + ')' : '';
     adminShowToast('✅ ' + tf('alerts.sentTo', recipient) + bccNote);
   } catch(e) {
+    console.error('[ClientReport] error:', e);
     adminShowToast('❌ ' + t('alerts.errors.sendFailed') + ': ' + (e.message || e));
   }
 }
