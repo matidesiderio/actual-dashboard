@@ -57,6 +57,24 @@ export default {
       if (path === '/gmail/oauth/poll') {
         return await handleGmailOAuthPoll(request, env, url, corsHdrs);
       }
+      if (path === '/gmail/oauth/diag') {
+        // Diagnóstico: verifica si KV está vinculado y si write+read funciona
+        const out = { kv_bound: !!env.OAUTH_KV };
+        if (env.OAUTH_KV) {
+          try {
+            const testKey = 'diag:' + Date.now();
+            await env.OAUTH_KV.put(testKey, 'ok', { expirationTtl: 60 });
+            const readBack = await env.OAUTH_KV.get(testKey);
+            out.kv_write_read = (readBack === 'ok') ? 'WORKS' : 'FAILED (read=' + readBack + ')';
+            await env.OAUTH_KV.delete(testKey);
+          } catch (e) {
+            out.kv_write_read = 'ERROR: ' + (e.message || e);
+          }
+        }
+        out.gmail_client_id_set = !!env.GMAIL_CLIENT_ID;
+        out.gmail_client_secret_set = !!env.GMAIL_CLIENT_SECRET;
+        return json(out, 200, corsHdrs);
+      }
       return json({ error: 'Unknown route', path }, 404, corsHdrs);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500, corsHdrs);
