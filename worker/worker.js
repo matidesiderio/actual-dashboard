@@ -57,6 +57,13 @@ export default {
       if (path === '/gmail/oauth/poll') {
         return await handleGmailOAuthPoll(request, env, url, corsHdrs);
       }
+      if (path === '/gmail/oauth/debuglist') {
+        // Debug: lista las keys oauth: que existen en KV ahora mismo
+        if (!env.OAUTH_KV) return json({ error: 'KV not bound' }, 200, corsHdrs);
+        const list = await env.OAUTH_KV.list({ prefix: 'oauth:' });
+        const keys = (list.keys || []).map(k => k.name);
+        return json({ count: keys.length, keys: keys }, 200, corsHdrs);
+      }
       if (path === '/gmail/oauth/diag') {
         // Diagnóstico: verifica si KV está vinculado y si write+read funciona
         const out = { kv_bound: !!env.OAUTH_KV };
