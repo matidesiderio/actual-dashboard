@@ -319,9 +319,11 @@ function _oauthCacheKey(origin, session) {
   return new Request(origin + '/__oauth_session__/' + encodeURIComponent(session));
 }
 // Guarda el resultado OAuth. Prefiere KV (confiable); si no está vinculado, cae a Cache API.
+// IMPORTANTE: guardamos los datos en METADATA (no en el value) para leerlos con list(),
+// que NO sufre el caché negativo de get() (el dashboard pollea antes de que exista la key).
 async function _oauthStore(env, origin, session, data) {
   if (env.OAUTH_KV) {
-    await env.OAUTH_KV.put('oauth:' + session, JSON.stringify(data), { expirationTtl: 300 });
+    await env.OAUTH_KV.put('oauth:' + session, '1', { expirationTtl: 300, metadata: data });
     return;
   }
   const cache = caches.default;
@@ -331,10 +333,13 @@ async function _oauthStore(env, origin, session, data) {
 }
 async function _oauthRetrieve(env, origin, session) {
   if (env.OAUTH_KV) {
-    const v = await env.OAUTH_KV.get('oauth:' + session);
-    if (!v) return null;
-    await env.OAUTH_KV.delete('oauth:' + session);
-    try { return JSON.parse(v); } catch(e) { return null; }
+    // list() lee del store autoritativo, sin el edge-cache de get()
+    const fullKey = 'oauth:' + session;
+    const listed = await env.OAUTH_KV.list({ prefix: fullKey });
+    const match = (listed.keys || []).find(k => k.name === fullKey);
+    if (!match || !match.metadata) return null;
+    await env.OAUTH_KV.delete(fullKey);
+    return match.metadata;
   }
   const cache = caches.default;
   const hit = await cache.match(_oauthCacheKey(origin, session));
