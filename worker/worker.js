@@ -290,21 +290,22 @@ async function handleGmailSend(request, env, corsHdrs) {
 // ── Gmail OAuth flow (popup-based for in-app connection) ─────
 // Helpers para guardar/leer el resultado OAuth server-side usando Cache API
 // (no requiere setup de KV; cache es per-colo y el mismo usuario pega al mismo colo).
-function _oauthCacheKey(session) {
-  return new Request('https://oauth-store.internal/session/' + encodeURIComponent(session));
+function _oauthCacheKey(origin, session) {
+  // Usar el dominio real del Worker — Cloudflare Cache API rechaza hostnames ajenos
+  return new Request(origin + '/__oauth_session__/' + encodeURIComponent(session));
 }
-async function _oauthStore(session, data) {
+async function _oauthStore(origin, session, data) {
   const cache = caches.default;
-  await cache.put(_oauthCacheKey(session), new Response(JSON.stringify(data), {
+  await cache.put(_oauthCacheKey(origin, session), new Response(JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' }
   }));
 }
-async function _oauthRetrieve(session) {
+async function _oauthRetrieve(origin, session) {
   const cache = caches.default;
-  const hit = await cache.match(_oauthCacheKey(session));
+  const hit = await cache.match(_oauthCacheKey(origin, session));
   if (!hit) return null;
   const data = await hit.json();
-  await cache.delete(_oauthCacheKey(session));
+  await cache.delete(_oauthCacheKey(origin, session));
   return data;
 }
 
@@ -331,7 +332,7 @@ async function handleGmailOAuthStart(request, env, url) {
 async function handleGmailOAuthPoll(request, env, url, corsHdrs) {
   const session = url.searchParams.get('session') || '';
   if (!session) return json({ error: 'Missing session' }, 400, corsHdrs);
-  const data = await _oauthRetrieve(session);
+  const data = await _oauthRetrieve(url.origin, session);
   if (!data) return json({ pending: true }, 200, corsHdrs);
   return json({ pending: false, success: !!data.refresh_token, email: data.email || '', refresh_token: data.refresh_token || '', error: data.error || '' }, 200, corsHdrs);
 }
@@ -349,15 +350,15 @@ async function handleGmailOAuthCallback(request, env, url) {
   }
 
   if (error) {
-    await _oauthStore(session, { error: 'Google devolvió: ' + error });
+    await _oauthStore(url.origin, session, { error: 'Google devolvió: ' + error });
     return redirectToBridge('error');
   }
   if (!code) {
-    await _oauthStore(session, { error: 'Falta el código de autorización' });
+    await _oauthStore(url.origin, session, { error: 'Falta el código de autorización' });
     return redirectToBridge('error');
   }
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    await _oauthStore(session, { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
+    await _oauthStore(url.origin, session, { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
     return redirectToBridge('error');
   }
 
@@ -375,7 +376,7 @@ async function handleGmailOAuthCallback(request, env, url) {
   });
   const tokens = await tokenRes.json();
   if (!tokens.refresh_token) {
-    await _oauthStore(session, { error: 'Google no devolvió refresh_token (revocá el acceso en https://myaccount.google.com/permissions y reintentá)' });
+    await _oauthStore(url.origin, session, { error: 'Google no devolvió refresh_token (revocá el acceso en https://myaccount.google.com/permissions y reintentá)' });
     return redirectToBridge('error');
   }
 
@@ -390,7 +391,7 @@ async function handleGmailOAuthCallback(request, env, url) {
   } catch(e) { /* ignore */ }
 
   // Guardar server-side para que el dashboard lo recupere por /poll
-  await _oauthStore(session, { email: userEmail, refresh_token: tokens.refresh_token });
+  await _oauthStore(url.origin, session, { email: userEmail, refresh_token: tokens.refresh_token });
   return redirectToBridge('ok');
 }
 
