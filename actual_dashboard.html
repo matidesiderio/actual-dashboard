@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-28-localstorage-v18', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-28-admin-save-v19', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -13281,7 +13281,7 @@ function getMyGmailConnection() {
 }
 function setMyGmailConnection(conn) {
   var key = currentUserKey();
-  if (key === 'admin') return; // admin uses preconfigured
+  // TODOS los usuarios (incluido admin) guardan su conexión OAuth — ya no hay preconfigurado
   var map = loadGmailConnections();
   if (conn) map[key] = conn;
   else delete map[key];
