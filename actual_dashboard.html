@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-28-oauth-serverpoll-v15', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-28-reset-btn-v16', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12147,6 +12147,10 @@ function buildAlertsSection() {
     h += '    <button class="alerts-conn-btn" onclick="connectMyGmail()">🔗 ' + t('alerts.myGmail.connect') + '</button>';
     h += '  </div>';
   }
+  // Link de reset siempre visible (borra la conexión Gmail guardada)
+  h += '  <div style="margin-top:10px;text-align:right;">';
+  h += '    <a href="javascript:void(0)" onclick="resetGmailConnection()" style="font-size:11px;color:var(--gray);text-decoration:underline;">🔄 ' + t('alerts.myGmail.reset') + '</a>';
+  h += '  </div>';
   h += '</div>';
 
   // ── BLOQUE 2 — Mi resumen como admin ──────────────────────
@@ -12332,6 +12336,13 @@ function disconnectMyGmail() {
   setMyGmailConnection(null);
   buildAlertsSection();
   adminShowToast('✓ Gmail desconectado');
+}
+// Reset total de la conexión Gmail (borra el storage entero, no solo el del user actual)
+function resetGmailConnection() {
+  if (!confirm(t('alerts.myGmail.resetConfirm'))) return;
+  try { localStorage.removeItem(GMAIL_CONNECTIONS_KEY); } catch(e) {}
+  buildAlertsSection();
+  adminShowToast('🔄 ' + t('alerts.myGmail.resetDone'));
 }
 function toggleAdminSummary(on) {
   var cfg = loadAlertsConfig();
@@ -15393,6 +15404,9 @@ var TRANSLATIONS = {
   'alerts.myGmail.connectedSuccess': { es: 'Gmail conectado: {0}', en: 'Gmail connected: {0}', pt: 'Gmail conectado: {0}', de: 'Gmail verbunden: {0}', zh: 'Gmail 已连接: {0}' },
   'alerts.myGmail.connectFailed':{ es: 'No se pudo conectar Gmail', en: 'Could not connect Gmail', pt: 'Falha ao conectar Gmail', de: 'Gmail-Verbindung fehlgeschlagen', zh: '无法连接 Gmail' },
   'alerts.myGmail.timeout':      { es: 'Tiempo agotado conectando Gmail. Reintentá.', en: 'Gmail connection timed out. Try again.', pt: 'Tempo esgotado. Tente novamente.', de: 'Zeitüberschreitung. Erneut versuchen.', zh: '连接超时，请重试。' },
+  'alerts.myGmail.reset':        { es: 'Resetear conexión', en: 'Reset connection', pt: 'Resetar conexão', de: 'Verbindung zurücksetzen', zh: '重置连接' },
+  'alerts.myGmail.resetConfirm': { es: '¿Borrar la conexión Gmail guardada? Vas a tener que reconectar.', en: 'Clear saved Gmail connection? You will need to reconnect.', pt: 'Limpar conexão Gmail salva?', de: 'Gespeicherte Gmail-Verbindung löschen?', zh: '清除已保存的 Gmail 连接？' },
+  'alerts.myGmail.resetDone':    { es: 'Conexión Gmail reseteada', en: 'Gmail connection reset', pt: 'Conexão Gmail resetada', de: 'Gmail-Verbindung zurückgesetzt', zh: 'Gmail 连接已重置' },
   'alerts.myGmail.connectOAuth': { es: 'Conectar con OAuth', en: 'Connect with OAuth', pt: 'Conectar com OAuth', de: 'Mit OAuth verbinden', zh: '使用 OAuth 连接' },
   'alerts.myGmail.preconfiguredHint': { es: 'Tu admin tiene Gmail preconfigurado en el Worker. Si querés probar el flow real de OAuth (recomendado antes de duplicar la app), tocá "Conectar con OAuth" arriba.', en: 'Admin has a preconfigured Gmail in the Worker. To test the real OAuth flow (recommended before duplicating the app), click "Connect with OAuth" above.', pt: 'O admin tem Gmail pré-configurado. Para testar o OAuth real, clique acima.', de: 'Admin hat vorkonfiguriertes Gmail. Für echten OAuth-Test oben klicken.', zh: '管理员已预配置 Gmail。要测试真实 OAuth 流程，请点击上方按钮。' },
   'alerts.adminSummary.recipientHint': { es: 'Auto-completa con tu Gmail conectado', en: 'Auto-fills with your connected Gmail', pt: 'Auto-preenche com seu Gmail', de: 'Auto-ausfüllen mit verbundenem Gmail', zh: '自动填充连接的 Gmail' },
