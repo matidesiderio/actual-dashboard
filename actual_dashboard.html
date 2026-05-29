@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-28-oauth-logs-v17', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-28-localstorage-v18', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12296,49 +12296,83 @@ function connectMyGmail() {
   }
 
   adminShowToast('🔗 ' + t('alerts.myGmail.opening'));
-  console.log('[GmailOAuth] popup abierto. session=' + oauthSession + ' | polling cada 1.5s a ' + API_BASE + '/gmail/oauth/poll');
+  console.log('[GmailOAuth] popup abierto. session=' + oauthSession);
 
-  // POLLING vía fetch al Worker (NO depende de window.opener ni popup.location,
-  // que Google rompe con COOP). El Worker guardó los tokens server-side bajo
-  // este session id; los consultamos cada 1.5s.
+  // Limpiar cualquier inbox previo
+  try { localStorage.removeItem('actual_gmail_oauth_inbox'); } catch(e) {}
+
   var startedAt = Date.now();
   var pollCount = 0;
+  var done = false;
+
+  function finish(data, source) {
+    if (done) return;
+    done = true;
+    clearInterval(pollInterval);
+    try { if (popup && !popup.closed) popup.close(); } catch(e) {}
+    try { localStorage.removeItem('actual_gmail_oauth_inbox'); } catch(e) {}
+    if (data && data.success && data.refresh_token) {
+      console.log('[GmailOAuth] ✅ tokens recibidos (' + source + ') para ' + data.email);
+      setMyGmailConnection({
+        connected: true,
+        email: data.email,
+        refresh_token: data.refresh_token,
+        source: 'oauth',
+        connectedAt: new Date().toISOString()
+      });
+      buildAlertsSection();
+      adminShowToast('✅ ' + tf('alerts.myGmail.connectedSuccess', data.email));
+    } else {
+      console.warn('[GmailOAuth] sin tokens (' + source + '):', data);
+      adminShowToast('❌ ' + ((data && data.error) || t('alerts.myGmail.connectFailed')));
+    }
+  }
+
   var pollInterval = setInterval(async function() {
     pollCount++;
-    // Timeout: 3 minutos
     if (Date.now() - startedAt > 180000) {
-      clearInterval(pollInterval);
-      if (popup && !popup.closed) try { popup.close(); } catch(e) {}
-      console.warn('[GmailOAuth] timeout tras ' + pollCount + ' intentos');
-      adminShowToast('⚠ ' + t('alerts.myGmail.timeout'));
+      if (!done) { clearInterval(pollInterval); if (popup && !popup.closed) try { popup.close(); } catch(e) {} adminShowToast('⚠ ' + t('alerts.myGmail.timeout')); }
       return;
     }
+
+    // 1) PRIMARIO — localStorage (instantáneo, lo escribe el bridge mismo-origen)
+    try {
+      var raw = localStorage.getItem('actual_gmail_oauth_inbox');
+      if (raw) {
+        var inbox = JSON.parse(raw);
+        // Validar que sea de esta sesión (o sin session por compat)
+        if (!inbox.session || inbox.session === oauthSession) {
+          console.log('[GmailOAuth] localStorage inbox detectado');
+          finish(inbox, 'localStorage');
+          return;
+        }
+      }
+    } catch(e) {}
+
+    // 2) FALLBACK — KV server-side vía fetch
     try {
       var res = await fetch(API_BASE + '/gmail/oauth/poll?session=' + encodeURIComponent(oauthSession));
       var data = await res.json();
       console.log('[GmailOAuth] poll #' + pollCount + ' →', JSON.stringify(data));
-      if (data && data.pending) return; // todavía no llegó
-      clearInterval(pollInterval);
-      try { if (popup && !popup.closed) popup.close(); } catch(e) {}
-      if (data && data.success && data.refresh_token) {
-        console.log('[GmailOAuth] ✅ tokens recibidos para ' + data.email);
-        setMyGmailConnection({
-          connected: true,
-          email: data.email,
-          refresh_token: data.refresh_token,
-          source: 'oauth',
-          connectedAt: new Date().toISOString()
-        });
-        buildAlertsSection();
-        adminShowToast('✅ ' + tf('alerts.myGmail.connectedSuccess', data.email));
-      } else {
-        console.warn('[GmailOAuth] respuesta sin tokens:', data);
-        adminShowToast('❌ ' + (data.error || t('alerts.myGmail.connectFailed')));
-      }
+      if (data && data.pending) return;
+      finish(data, 'kv');
     } catch(e) {
       console.error('[GmailOAuth] error en poll #' + pollCount + ':', e);
     }
-  }, 1500);
+  }, 700);
+
+  // Listener de 'storage' — se dispara al instante cuando el bridge escribe (otra ventana, mismo origen)
+  var storageHandler = function(ev) {
+    if (ev.key !== 'actual_gmail_oauth_inbox' || !ev.newValue) return;
+    try {
+      var inbox = JSON.parse(ev.newValue);
+      if (!inbox.session || inbox.session === oauthSession) {
+        window.removeEventListener('storage', storageHandler);
+        finish(inbox, 'storage-event');
+      }
+    } catch(e) {}
+  };
+  window.addEventListener('storage', storageHandler);
 }
 function disconnectMyGmail() {
   if (!confirm(t('alerts.myGmail.disconnectConfirm'))) return;

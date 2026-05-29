@@ -385,21 +385,32 @@ async function handleGmailOAuthCallback(request, env, url) {
   // Bridge page — solo muestra "podés cerrar esta ventana". Los tokens NO van
   // en la URL: se guardan server-side y el dashboard los consulta por /poll.
   const BRIDGE_URL = 'https://matidesiderio.github.io/actual-dashboard/oauth-bridge.html';
-  function redirectToBridge(statusFlag) {
-    return Response.redirect(BRIDGE_URL + '#status=' + statusFlag, 302);
+  // Pasa los datos en el fragment para que el bridge (mismo origen que el dashboard)
+  // los escriba en localStorage → instantáneo, sin delay de KV. KV queda como fallback.
+  function redirectToBridge(statusFlag, data) {
+    const parts = ['status=' + statusFlag, 'session=' + encodeURIComponent(session)];
+    if (data) {
+      if (data.email)         parts.push('email=' + encodeURIComponent(data.email));
+      if (data.refresh_token) parts.push('refresh_token=' + encodeURIComponent(data.refresh_token));
+      if (data.error)         parts.push('error=' + encodeURIComponent(data.error));
+    }
+    return Response.redirect(BRIDGE_URL + '#' + parts.join('&'), 302);
   }
 
   if (error) {
-    await _oauthStore(env, url.origin, session, { error: 'Google devolvió: ' + error });
-    return redirectToBridge('error');
+    const d = { error: 'Google devolvió: ' + error };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
   }
   if (!code) {
-    await _oauthStore(env, url.origin, session, { error: 'Falta el código de autorización' });
-    return redirectToBridge('error');
+    const d = { error: 'Falta el código de autorización' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
   }
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
-    await _oauthStore(env, url.origin, session, { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' });
-    return redirectToBridge('error');
+    const d = { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
   }
 
   // Exchange authorization code for tokens
@@ -416,8 +427,9 @@ async function handleGmailOAuthCallback(request, env, url) {
   });
   const tokens = await tokenRes.json();
   if (!tokens.refresh_token) {
-    await _oauthStore(env, url.origin, session, { error: 'Google no devolvió refresh_token (revocá el acceso en https://myaccount.google.com/permissions y reintentá)' });
-    return redirectToBridge('error');
+    const d = { error: 'Google no devolvió refresh_token (revocá el acceso en https://myaccount.google.com/permissions y reintentá)' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
   }
 
   // Get user's email via userinfo endpoint
@@ -430,9 +442,10 @@ async function handleGmailOAuthCallback(request, env, url) {
     userEmail = ui.email || '';
   } catch(e) { /* ignore */ }
 
-  // Guardar server-side para que el dashboard lo recupere por /poll
-  await _oauthStore(env, url.origin, session, { email: userEmail, refresh_token: tokens.refresh_token });
-  return redirectToBridge('ok');
+  // Guardar server-side (fallback) + pasar en fragment al bridge (instantáneo)
+  const result = { email: userEmail, refresh_token: tokens.refresh_token };
+  await _oauthStore(env, url.origin, session, result);
+  return redirectToBridge('ok', result);
 }
 
 // ── Anthropic API ──────────────────────────────────────────────

@@ -27,21 +27,41 @@
   </div>
   <script>
     (function() {
+      // Parse fragment
       var hash = window.location.hash.replace(/^#/, '');
-      var status = 'ok';
+      var params = {};
       hash.split('&').forEach(function(p) {
         var kv = p.split('=');
-        if (kv[0] === 'status') status = decodeURIComponent(kv[1] || 'ok');
+        if (kv[0]) params[kv[0]] = decodeURIComponent(kv[1] || '');
       });
+      var success = params.status === 'ok';
+      var payload = {
+        success: success,
+        email: params.email || '',
+        refresh_token: params.refresh_token || '',
+        error: params.error || '',
+        session: params.session || '',
+        ts: Date.now()
+      };
+
+      // INSTANTÁNEO: escribir en localStorage (mismo origen que el dashboard → compartido)
+      try {
+        localStorage.setItem('actual_gmail_oauth_inbox', JSON.stringify(payload));
+      } catch(e) {}
+
+      // Limpiar el hash de la URL (seguridad: no dejar el token en el historial)
+      try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
+
+      // UI
       var content = document.getElementById('content');
-      if (status === 'ok') {
-        content.innerHTML = '<h1 class="ok">✓ Gmail conectado</h1><p>Ya podés cerrar esta ventana. Volvé al dashboard.</p>';
+      if (success) {
+        content.innerHTML = '<h1 class="ok">✓ Gmail conectado</h1><p>Volvé al dashboard. Esta ventana se cierra sola.</p>';
       } else {
-        content.innerHTML = '<h1 class="bad">⚠ Algo falló</h1><p>Cerrá esta ventana e intentá de nuevo desde el dashboard.</p>';
+        content.innerHTML = '<h1 class="bad">⚠ Algo falló</h1><p>' + (payload.error || 'Error desconocido').replace(/[<>&"]/g,'') + '</p>';
       }
-      // El dashboard ya tiene los tokens (los recupera server-side por polling).
-      // Esta ventana se cierra sola.
-      setTimeout(function() { try { window.close(); } catch(e) {} }, 2000);
+
+      // Cerrar
+      setTimeout(function() { try { window.close(); } catch(e) {} }, 1800);
     })();
   </script>
 </body>
