@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-29-encoding-logs-v21', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-29-dup-fix-v22', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12707,15 +12707,8 @@ function updateClientHour(cid, v) {
   saveAlertsConfig(cfg);
   buildAlertsSection();
 }
-function sendClientReportNow(cid) {
-  var cfg = loadAlertsConfig();
-  var pc = cfg.perClient[cid] || {};
-  var recipient = (pc.recipient || '').trim();
-  if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
-  var conn = getMyGmailConnection();
-  if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
-  adminShowToast('📧 ' + tf('alerts.testEnqueued', recipient) + ' (Fase 1B activa envío real)');
-}
+// (La función real sendClientReportNow está definida más arriba — esta stub se eliminó
+//  porque pisaba a la real y nunca enviaba de verdad.)
 
 // ── Conexión y Cuentas (visibility + discovery) ─────────────────
 var connTab = 'managed'; // 'managed' | 'meta' | 'google'
