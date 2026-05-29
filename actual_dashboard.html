@@ -9677,7 +9677,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-28-admin-save-v19', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-05-28-client-email-v20', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -12250,17 +12250,13 @@ function buildAlertsSection() {
       });
       h += '      </select>';
       h += '    </div>';
-      // El destinatario viene del wizard del cliente (contactEmail). Acá lo mostramos solo lectura.
-      var clientEmail = (u.contactEmail || pc.recipient || '').trim();
+      // Destinatario editable inline. Pre-fill: pc.recipient (lo cargado acá) o contactEmail del wizard.
+      var clientEmail = (pc.recipient || u.contactEmail || '').trim();
       h += '    <div class="alerts-field" style="flex:2;">';
-      h += '      <label>' + t('alerts.field.recipient') + ' <a href="javascript:void(0)" onclick="showClientWizardModal(\'' + cid + '\')" style="font-size:10.5px;color:var(--lime);text-decoration:none;margin-left:6px;">✏️ ' + t('alerts.editInWizard') + '</a></label>';
-      if (clientEmail) {
-        h += '      <div class="alerts-recipient-display">' + escHtml(clientEmail) + '</div>';
-      } else {
-        h += '      <div class="alerts-recipient-display empty">' + t('alerts.noEmailSet') + '</div>';
-      }
+      h += '      <label>' + t('alerts.field.recipient') + '</label>';
+      h += '      <input type="email" placeholder="email@cliente.com" value="' + escAttr(clientEmail) + '" oninput="updateClientRecipient(\'' + cid + '\', this.value)" />';
       h += '    </div>';
-      h += '    <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')" title="' + escAttr(t('alerts.sendTest')) + '"' + (clientEmail ? '' : ' disabled') + '>📧</button>';
+      h += '    <button class="alerts-test-btn-mini" onclick="sendClientReportNow(\'' + cid + '\')" title="' + escAttr(t('alerts.sendTest')) + '">📧</button>';
       h += '  </div>';
       if (pc.enabled && nextSend) {
         h += '  <div class="alerts-next-send" style="margin-top:8px;">📅 ' + tf('alerts.nextSend', formatNextSendFriendly(nextSend, clientTz)) + '</div>';
@@ -12480,10 +12476,10 @@ async function sendAdminSummaryNow() {
 
 async function sendClientReportNow(cid) {
   var u = USERS[cid] || {};
-  // Priorizar contactEmail del wizard, fallback al recipient legacy de alerts
+  // Priorizar lo cargado inline en alerts (pc.recipient), fallback al contactEmail del wizard
   var cfg = loadAlertsConfig();
   var pc = cfg.perClient[cid] || {};
-  var recipient = ((u.contactEmail || pc.recipient) || '').trim();
+  var recipient = ((pc.recipient || u.contactEmail) || '').trim();
   if (!recipient) { adminShowToast('⚠ ' + t('alerts.errors.noRecipient')); return; }
   var conn = getMyGmailConnection();
   if (!conn.connected) { adminShowToast('⚠ ' + t('alerts.errors.notConnected')); return; }
