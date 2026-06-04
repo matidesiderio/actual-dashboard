@@ -57,6 +57,15 @@ export default {
       if (path === '/gmail/oauth/poll') {
         return await handleGmailOAuthPoll(request, env, url, corsHdrs);
       }
+      if (path === '/google/oauth/start') {
+        return await handleGoogleOAuthStart(request, env, url);
+      }
+      if (path === '/google/oauth/callback') {
+        return await handleGoogleOAuthCallback(request, env, url);
+      }
+      if (path === '/google/oauth/poll') {
+        return await handleGoogleOAuthPoll(request, env, url, corsHdrs);
+      }
       if (path === '/gmail/oauth/debuglist') {
         // Debug: lista las keys oauth: que existen en KV ahora mismo
         if (!env.OAUTH_KV) return json({ error: 'KV not bound' }, 200, corsHdrs);
@@ -100,7 +109,7 @@ function corsHeaders(env, request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, x-login-customer-id, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, x-login-customer-id, x-user-refresh-token, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -171,6 +180,32 @@ async function getGoogleAccessToken(env) {
   return _googleTokenCache.token;
 }
 
+// Refresh access token usando el refresh_token del USUARIO (no el del dueño).
+// Cache en memoria por refresh_token para no pegarle a Google en cada call.
+let _userGoogleTokenCache = {};
+async function getUserGoogleAccessToken(refreshToken, clientId, clientSecret) {
+  const cached = _userGoogleTokenCache[refreshToken];
+  if (cached && cached.expiry > Date.now()) return cached.token;
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:
+      'client_id=' + encodeURIComponent(clientId) +
+      '&client_secret=' + encodeURIComponent(clientSecret) +
+      '&refresh_token=' + encodeURIComponent(refreshToken) +
+      '&grant_type=refresh_token'
+  });
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error('User Google OAuth refresh failed: ' + (data.error_description || data.error || 'unknown'));
+  }
+  _userGoogleTokenCache[refreshToken] = {
+    token: data.access_token,
+    expiry: Date.now() + ((data.expires_in || 3600) - 60) * 1000,
+  };
+  return data.access_token;
+}
+
 async function handleGoogleAds(request, env, url, corsHdrs) {
   if (!env.GOOGLE_DEVELOPER_TOKEN) throw new Error('GOOGLE_DEVELOPER_TOKEN secret not configured');
 
@@ -178,7 +213,18 @@ async function handleGoogleAds(request, env, url, corsHdrs) {
   const upstream = 'https://googleads.googleapis.com/v20/' + subPath;
 
   const loginCustId = request.headers.get('x-login-customer-id') || '';
-  const token = await getGoogleAccessToken(env);
+  // PRIORIZAR el refresh_token del USUARIO si viene en el header (OAuth multi-tenant).
+  // Si no, caer al GOOGLE_REFRESH_TOKEN del dueño (fallback / admin convivencia).
+  const userRefreshToken = request.headers.get('x-user-refresh-token') || '';
+  let token;
+  if (userRefreshToken) {
+    if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+      throw new Error('GMAIL_CLIENT_ID/SECRET not configured for user OAuth');
+    }
+    token = await getUserGoogleAccessToken(userRefreshToken, env.GMAIL_CLIENT_ID, env.GMAIL_CLIENT_SECRET);
+  } else {
+    token = await getGoogleAccessToken(env);
+  }
 
   const init = {
     method: request.method,
@@ -448,6 +494,99 @@ async function handleGmailOAuthCallback(request, env, url) {
   } catch(e) { /* ignore */ }
 
   // Guardar server-side (fallback) + pasar en fragment al bridge (instantáneo)
+  const result = { email: userEmail, refresh_token: tokens.refresh_token };
+  await _oauthStore(env, url.origin, session, result);
+  return redirectToBridge('ok', result);
+}
+
+// ── Google Ads OAuth flow (mismo patrón que Gmail, scope adwords.readonly) ───
+async function handleGoogleOAuthStart(request, env, url) {
+  if (!env.GMAIL_CLIENT_ID) {
+    return new Response('GMAIL_CLIENT_ID secret not configured', { status: 500 });
+  }
+  const session = url.searchParams.get('session') || '';
+  const callbackUrl = `${url.origin}/google/oauth/callback`;
+  const params = new URLSearchParams({
+    client_id: env.GMAIL_CLIENT_ID,
+    redirect_uri: callbackUrl,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/adwords.readonly https://www.googleapis.com/auth/userinfo.email',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    state: session
+  });
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  return Response.redirect(authUrl, 302);
+}
+
+async function handleGoogleOAuthPoll(request, env, url, corsHdrs) {
+  const session = url.searchParams.get('session') || '';
+  if (!session) return json({ error: 'Missing session' }, 400, corsHdrs);
+  const data = await _oauthRetrieve(env, url.origin, session);
+  if (!data) return json({ pending: true }, 200, corsHdrs);
+  return json({ pending: false, success: !!data.refresh_token, email: data.email || '', refresh_token: data.refresh_token || '', error: data.error || '' }, 200, corsHdrs);
+}
+
+async function handleGoogleOAuthCallback(request, env, url) {
+  const code  = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
+  const session = url.searchParams.get('state') || '';
+
+  const BRIDGE_URL = 'https://matidesiderio.github.io/actual-dashboard/oauth-bridge.html';
+  function redirectToBridge(statusFlag, data) {
+    const parts = ['status=' + statusFlag, 'session=' + encodeURIComponent(session), 'provider=googleads'];
+    if (data) {
+      if (data.email)         parts.push('email=' + encodeURIComponent(data.email));
+      if (data.refresh_token) parts.push('refresh_token=' + encodeURIComponent(data.refresh_token));
+      if (data.error)         parts.push('error=' + encodeURIComponent(data.error));
+    }
+    return Response.redirect(BRIDGE_URL + '#' + parts.join('&'), 302);
+  }
+
+  if (error) {
+    const d = { error: 'Google devolvió: ' + error };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+  if (!code) {
+    const d = { error: 'Falta el código de autorización' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+    const d = { error: 'GMAIL_CLIENT_ID/SECRET no configurados en el Worker' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.GMAIL_CLIENT_ID,
+      client_secret: env.GMAIL_CLIENT_SECRET,
+      code: code,
+      redirect_uri: `${url.origin}/google/oauth/callback`,
+      grant_type: 'authorization_code'
+    }).toString()
+  });
+  const tokens = await tokenRes.json();
+  if (!tokens.refresh_token) {
+    const d = { error: 'Google no devolvió refresh_token (revocá acceso en https://myaccount.google.com/permissions y reintentá)' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+
+  let userEmail = '';
+  try {
+    const uiRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: 'Bearer ' + tokens.access_token }
+    });
+    const ui = await uiRes.json();
+    userEmail = ui.email || '';
+  } catch(e) { /* ignore */ }
+
   const result = { email: userEmail, refresh_token: tokens.refresh_token };
   await _oauthStore(env, url.origin, session, result);
   return redirectToBridge('ok', result);

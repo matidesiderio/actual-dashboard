@@ -5619,6 +5619,7 @@
       <button class="admin-nav-btn" id="admin-nav-clients" onclick="enterClientsSection()" data-i18n="nav.clients">📋 Clientes</button>
       <button class="admin-nav-btn owner-only" id="admin-nav-team" onclick="switchAdminSection('team')" data-i18n="nav.team">🧑‍💼 Mi Equipo</button>
       <button class="admin-nav-btn" id="admin-nav-alerts" onclick="switchAdminSection('alerts')" data-i18n="nav.alerts">🔔 Alertas y Reportes</button>
+      <button class="admin-nav-btn" id="admin-nav-connections" onclick="switchAdminSection('connections')" data-i18n="nav.connections">🔗 Mis Conexiones</button>
       <button class="admin-nav-btn" id="admin-nav-config" onclick="switchAdminSection('config')" data-i18n="nav.config">⚙️ Configuración</button>
     </div>
 
@@ -5733,6 +5734,11 @@
     <!-- ALERTS section (Alertas y Reportes — Gmail + scheduling) -->
     <div id="admin-section-alerts" class="agency-section">
       <!-- populated by buildAlertsSection() -->
+    </div>
+
+    <!-- CONNECTIONS section (Mis Conexiones — Gmail + Google Ads + futuro Meta) -->
+    <div id="admin-section-connections" class="agency-section">
+      <!-- populated by buildConnectionsSection() -->
     </div>
 
     <!-- CONFIG section (now: Mi cuenta — Profile / Plans / Logout) -->
@@ -9677,7 +9683,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-05-29-dup-fix-v22', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-06-04-google-oauth-v23', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -11075,10 +11081,7 @@ async function fetchAdminGoogleCampaigns(userId) {
     var mccId    = getMccForClient(userId);
     var res = await fetch(GOOGLEADS_BASE + 'customers/' + cleanId + '/googleAds:search', {
       method: 'POST',
-      headers: USE_PROXY ? {
-        'Content-Type': 'application/json',
-        'x-login-customer-id': mccId
-      } : {
+      headers: USE_PROXY ? googleAdsProxyHeaders(mccId) : {
         'Authorization': 'Bearer ' + (await getGoogleAccessToken()),
         'developer-token': AGENCY_CONFIG.google.developerToken,
         'login-customer-id': mccId,
@@ -12104,6 +12107,79 @@ function hideImprovementPointsDrawer() {
 }
 
 // ── Alertas y Reportes (Gmail + scheduling) ─────────────────────
+// ── Mis Conexiones — Gmail + Google Ads (+ futuro Meta) ─────────
+function buildConnectionsSection() {
+  var el = document.getElementById('admin-section-connections');
+  if (!el) return;
+  var gmail = getMyGmailConnection();
+  var gads  = getMyGoogleAdsConnection();
+
+  var h = '';
+  h += '<div class="conn-section-body">';
+  h += '  <div class="conn-header">';
+  h += '    <div>';
+  h += '      <div class="conn-title">🔗 Mis Conexiones</div>';
+  h += '      <div class="conn-subtitle">Conectá tus cuentas Gmail y Google Ads desde acá. Cuando cliones la app para un cliente, cada usuario hace su propio OAuth.</div>';
+  h += '    </div>';
+  h += '  </div>';
+
+  // ── BLOQUE Gmail ────────────────────────────────────────────
+  h += '<div class="alerts-block">';
+  h += '  <div class="alerts-block-title">📧 Gmail <span style="font-size:11px;color:var(--gray);font-weight:400;margin-left:8px;">para envío de reportes</span></div>';
+  if (gmail.connected && gmail.source === 'oauth') {
+    h += '  <div class="alerts-conn-row connected">';
+    h += '    <span class="alerts-conn-icon">✓</span>';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">' + escHtml(gmail.email) + '</div>';
+    h += '      <div class="alerts-conn-source">Conectado por OAuth — los reportes salen desde tu Gmail</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGmail()">Desconectar</button>';
+    h += '  </div>';
+  } else {
+    h += '  <div class="alerts-conn-row">';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">Sin Gmail conectado</div>';
+    h += '      <div class="alerts-conn-source">Necesitás conectar tu Gmail para que los reportes salgan desde tu correo personal.</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn" onclick="connectMyGmail()">🔗 Conectar mi Gmail</button>';
+    h += '  </div>';
+  }
+  h += '</div>';
+
+  // ── BLOQUE Google Ads ───────────────────────────────────────
+  h += '<div class="alerts-block">';
+  h += '  <div class="alerts-block-title">🔵 Google Ads <span style="font-size:11px;color:var(--gray);font-weight:400;margin-left:8px;">solo lectura — para ver tus cuentas</span></div>';
+  if (gads.connected && gads.source === 'oauth') {
+    h += '  <div class="alerts-conn-row connected">';
+    h += '    <span class="alerts-conn-icon">✓</span>';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">' + escHtml(gads.email) + '</div>';
+    h += '      <div class="alerts-conn-source">Conectado por OAuth — el dashboard usa tu propia cuenta para traer datos</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyGoogleAds()">Desconectar</button>';
+    h += '  </div>';
+  } else {
+    h += '  <div class="alerts-conn-row">';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">Sin Google Ads conectado</div>';
+    h += '      <div class="alerts-conn-source">Conectá tu cuenta para ver TUS cuentas de Google Ads (no las del dueño de la app).</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn" onclick="connectMyGoogleAds()">🔗 Conectar Google Ads</button>';
+    h += '  </div>';
+    h += '  <div class="alerts-hint" style="margin-top:10px;margin-bottom:0;">💡 Si no conectás, el dashboard usa el fallback del dueño de la app (vos como admin podés convivir así por ahora).</div>';
+  }
+  h += '</div>';
+
+  // ── Placeholder Meta (futuro) ───────────────────────────────
+  h += '<div class="alerts-block" style="opacity:0.5;">';
+  h += '  <div class="alerts-block-title">🅼 Meta / Facebook <span style="font-size:11px;color:var(--gray);font-weight:400;margin-left:8px;">próximamente</span></div>';
+  h += '  <div class="alerts-hint" style="margin-bottom:0;">Acá vas a poder conectar Facebook Pages + Meta Ads cuando esté implementado.</div>';
+  h += '</div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
 function buildAlertsSection() {
   var el = document.getElementById('admin-section-alerts');
   if (!el) return;
@@ -12370,6 +12446,105 @@ function connectMyGmail() {
   };
   window.addEventListener('storage', storageHandler);
 }
+
+// ── Google Ads OAuth connect (mismo patrón que Gmail) ──────────
+function connectMyGoogleAds() {
+  var oauthSession = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+  var popupUrl = API_BASE + '/google/oauth/start?session=' + encodeURIComponent(oauthSession);
+  var w = 520, hgt = 720;
+  var left = (window.screen.availWidth - w) / 2;
+  var top  = (window.screen.availHeight - hgt) / 2;
+  var popup = window.open(
+    popupUrl,
+    'gads-oauth-' + Date.now(),
+    'width=' + w + ',height=' + hgt + ',left=' + left + ',top=' + top + ',scrollbars=yes'
+  );
+  if (!popup) {
+    adminShowToast('⚠ ' + t('alerts.myGmail.popupBlocked'));
+    return;
+  }
+
+  adminShowToast('🔗 Abriendo Google para autorizar Ads…');
+  console.log('[GoogleAdsOAuth] popup abierto. session=' + oauthSession);
+
+  try { localStorage.removeItem('actual_googleads_oauth_inbox'); } catch(e) {}
+
+  var startedAt = Date.now();
+  var pollCount = 0;
+  var done = false;
+
+  function finish(data, source) {
+    if (done) return;
+    done = true;
+    clearInterval(pollInterval);
+    try { if (popup && !popup.closed) popup.close(); } catch(e) {}
+    try { localStorage.removeItem('actual_googleads_oauth_inbox'); } catch(e) {}
+    if (data && data.success && data.refresh_token) {
+      console.log('[GoogleAdsOAuth] ✅ tokens recibidos (' + source + ') para ' + data.email);
+      setMyGoogleAdsConnection({
+        connected: true,
+        email: data.email,
+        refresh_token: data.refresh_token,
+        source: 'oauth',
+        connectedAt: new Date().toISOString()
+      });
+      if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
+      adminShowToast('✅ Google Ads conectado: ' + data.email);
+    } else {
+      console.warn('[GoogleAdsOAuth] sin tokens (' + source + '):', data);
+      adminShowToast('❌ ' + ((data && data.error) || 'No se pudo conectar Google Ads'));
+    }
+  }
+
+  var pollInterval = setInterval(async function() {
+    pollCount++;
+    if (Date.now() - startedAt > 180000) {
+      if (!done) { clearInterval(pollInterval); if (popup && !popup.closed) try { popup.close(); } catch(e) {} adminShowToast('⚠ Tiempo agotado conectando Google Ads'); }
+      return;
+    }
+    // PRIMARIO — localStorage del bridge (instantáneo)
+    try {
+      var raw = localStorage.getItem('actual_googleads_oauth_inbox');
+      if (raw) {
+        var inbox = JSON.parse(raw);
+        if (!inbox.session || inbox.session === oauthSession) {
+          console.log('[GoogleAdsOAuth] localStorage inbox detectado');
+          finish(inbox, 'localStorage');
+          return;
+        }
+      }
+    } catch(e) {}
+    // FALLBACK — KV server-side
+    try {
+      var res = await fetch(API_BASE + '/google/oauth/poll?session=' + encodeURIComponent(oauthSession));
+      var data = await res.json();
+      console.log('[GoogleAdsOAuth] poll #' + pollCount + ' →', JSON.stringify(data));
+      if (data && data.pending) return;
+      finish(data, 'kv');
+    } catch(e) {
+      console.error('[GoogleAdsOAuth] error en poll #' + pollCount + ':', e);
+    }
+  }, 700);
+
+  var storageHandler = function(ev) {
+    if (ev.key !== 'actual_googleads_oauth_inbox' || !ev.newValue) return;
+    try {
+      var inbox = JSON.parse(ev.newValue);
+      if (!inbox.session || inbox.session === oauthSession) {
+        window.removeEventListener('storage', storageHandler);
+        finish(inbox, 'storage-event');
+      }
+    } catch(e) {}
+  };
+  window.addEventListener('storage', storageHandler);
+}
+function disconnectMyGoogleAds() {
+  if (!confirm('¿Desconectar tu cuenta Google Ads? Las llamadas van a caer al fallback del Worker.')) return;
+  setMyGoogleAdsConnection(null);
+  if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
+  adminShowToast('✓ Google Ads desconectado');
+}
+
 function disconnectMyGmail() {
   if (!confirm(t('alerts.myGmail.disconnectConfirm'))) return;
   setMyGmailConnection(null);
@@ -13094,12 +13269,16 @@ async function discoverMetaAccounts() {
 }
 
 async function discoverGoogleAccounts() {
-  // 1) Listar todos los Customer IDs a los que el OAuth tiene acceso directo
-  var listHeaders = USE_PROXY ? { 'Content-Type': 'application/json' } : {
+  // 1) Listar todos los Customer IDs a los que el OAuth tiene acceso directo.
+  // OJO: este endpoint usa el TOKEN DEL USUARIO si lo tiene → trae los Customers que él
+  // ve, no los del dueño. Sin OAuth de usuario → cae al token del dueño (fallback).
+  var listHeaders = USE_PROXY ? googleAdsProxyHeaders('') : {
     'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
     'developer-token':  AGENCY_CONFIG.google.developerToken,
     'Content-Type':     'application/json'
   };
+  // listAccessibleCustomers no acepta login-customer-id, lo sacamos
+  if (USE_PROXY) delete listHeaders['x-login-customer-id'];
   var listRes = await fetch(GOOGLEADS_BASE + 'customers:listAccessibleCustomers', {
     method: 'GET',
     headers: listHeaders
@@ -13123,10 +13302,7 @@ async function discoverGoogleAccounts() {
   // 2) Para cada customer accesible, hacer una query en paralelo a su árbol
   var queries = customerIds.map(async function(cid) {
     try {
-      var headers = USE_PROXY ? {
-        'Content-Type':        'application/json',
-        'x-login-customer-id': cid
-      } : {
+      var headers = USE_PROXY ? googleAdsProxyHeaders(cid) : {
         'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
         'developer-token':  AGENCY_CONFIG.google.developerToken,
         'login-customer-id': cid,
@@ -13279,6 +13455,46 @@ function setMyGmailConnection(conn) {
   if (conn) map[key] = conn;
   else delete map[key];
   saveGmailConnections(map);
+}
+
+// ── Google Ads connections (mismo patrón que Gmail) ─────────────
+var GOOGLEADS_CONNECTIONS_KEY = 'actual_google_ads_connections';
+function loadGoogleAdsConnections() {
+  try { return JSON.parse(localStorage.getItem(GOOGLEADS_CONNECTIONS_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveGoogleAdsConnections(map) {
+  try { localStorage.setItem(GOOGLEADS_CONNECTIONS_KEY, JSON.stringify(map)); } catch(e) {}
+}
+// Google Ads OAuth connection del usuario actual.
+// Si no la tiene → se devuelve no-conectado, las llamadas Google Ads usan el fallback del Worker.
+function getMyGoogleAdsConnection() {
+  var key = currentUserKey();
+  var map = loadGoogleAdsConnections();
+  if (map[key] && map[key].refresh_token) {
+    return map[key];
+  }
+  return { connected: false, email: '', source: null };
+}
+function setMyGoogleAdsConnection(conn) {
+  var key = currentUserKey();
+  var map = loadGoogleAdsConnections();
+  if (conn) map[key] = conn;
+  else delete map[key];
+  saveGoogleAdsConnections(map);
+}
+// Headers para llamadas Google Ads vía Worker proxy.
+// Si el usuario tiene OAuth conectado → manda su refresh_token (multi-tenant).
+// Si no → el Worker cae al GOOGLE_REFRESH_TOKEN del dueño (fallback / admin).
+function googleAdsProxyHeaders(loginCustomerId) {
+  var h = {
+    'Content-Type': 'application/json',
+    'x-login-customer-id': loginCustomerId || ''
+  };
+  var conn = getMyGoogleAdsConnection();
+  if (conn.connected && conn.refresh_token) {
+    h['x-user-refresh-token'] = conn.refresh_token;
+  }
+  return h;
 }
 function addDays(dateIso, days) {
   var d = dateIso ? new Date(dateIso) : new Date();
@@ -15401,6 +15617,7 @@ var TRANSLATIONS = {
 
   // Alertas y Reportes
   'nav.alerts':                  { es: '🔔 Alertas y Reportes', en: '🔔 Alerts & Reports', pt: '🔔 Alertas e Relatórios', de: '🔔 Benachrichtigungen', zh: '🔔 提醒和报告' },
+  'nav.connections':             { es: '🔗 Mis Conexiones', en: '🔗 My Connections', pt: '🔗 Minhas Conexões', de: '🔗 Meine Verbindungen', zh: '🔗 我的连接' },
   'alerts.title':                { es: 'Alertas y Reportes', en: 'Alerts & Reports', pt: 'Alertas e Relatórios', de: 'Benachrichtigungen', zh: '提醒和报告' },
   'alerts.subtitle':             { es: 'Programá reportes automáticos cada 15 días por cliente y un resumen quincenal con tus cuentas más críticas.', en: 'Schedule automatic reports every 15 days per client and a bi-weekly summary of your most critical accounts.', pt: 'Programe relatórios automáticos quinzenais.', de: 'Planen Sie automatische Berichte alle 15 Tage.', zh: '安排每 15 天的自动报告。' },
   'alerts.myGmail.title':        { es: 'Mi conexión Gmail', en: 'My Gmail connection', pt: 'Minha conexão Gmail', de: 'Meine Gmail-Verbindung', zh: '我的 Gmail 连接' },
@@ -16709,6 +16926,14 @@ function switchAdminSection(section) {
     if (dpWrap)          dpWrap.style.display = 'none';
     if (rtWrap)          rtWrap.style.display = 'none';
     if (typeof buildAlertsSection === 'function') buildAlertsSection();
+  } else if (section === 'connections') {
+    if (overviewSidebar) overviewSidebar.style.display = 'none';
+    if (clientList)      clientList.style.display = 'none';
+    if (newClientBtn)    newClientBtn.style.display = 'none';
+    if (refreshBtn)      refreshBtn.style.display = 'none';
+    if (dpWrap)          dpWrap.style.display = 'none';
+    if (rtWrap)          rtWrap.style.display = 'none';
+    if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
   } else if (section === 'config') {
     if (overviewSidebar) overviewSidebar.style.display = 'none';
     if (clientList)      clientList.style.display = 'none';
@@ -16845,10 +17070,7 @@ function getMccForClient(userId) {
 async function fetchGooglePrepaidBalance(googleId, loginCustomerId) {
   var cleanId  = googleId.replace(/-/g, '');
 
-  var headers = USE_PROXY ? {
-    'Content-Type':       'application/json',
-    'x-login-customer-id': loginCustomerId
-  } : {
+  var headers = USE_PROXY ? googleAdsProxyHeaders(loginCustomerId) : {
     'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
     'developer-token':  AGENCY_CONFIG.google.developerToken,
     'login-customer-id': loginCustomerId,
@@ -17055,10 +17277,7 @@ async function fetchGoogleAdsMetrics(googleId, dr, userId) {
   for (var i = 0; i < mccOrder.length; i++) {
     var mccId = mccOrder[i];
     try {
-      var headers = USE_PROXY ? {
-        'Content-Type':        'application/json',
-        'x-login-customer-id': mccId
-      } : {
+      var headers = USE_PROXY ? googleAdsProxyHeaders(mccId) : {
         'Authorization':    'Bearer ' + (await getGoogleAccessToken()),
         'developer-token':  AGENCY_CONFIG.google.developerToken,
         'login-customer-id': mccId,

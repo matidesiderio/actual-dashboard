@@ -35,27 +35,33 @@
         if (kv[0]) params[kv[0]] = decodeURIComponent(kv[1] || '');
       });
       var success = params.status === 'ok';
+      var provider = params.provider || 'gmail'; // default = gmail (backward compat)
       var payload = {
         success: success,
         email: params.email || '',
         refresh_token: params.refresh_token || '',
         error: params.error || '',
         session: params.session || '',
+        provider: provider,
         ts: Date.now()
       };
 
-      // INSTANTÁNEO: escribir en localStorage (mismo origen que el dashboard → compartido)
+      // INSTANTÁNEO: inbox key según provider (gmail / googleads / etc.)
+      var inboxKey = (provider === 'googleads')
+        ? 'actual_googleads_oauth_inbox'
+        : 'actual_gmail_oauth_inbox';
       try {
-        localStorage.setItem('actual_gmail_oauth_inbox', JSON.stringify(payload));
+        localStorage.setItem(inboxKey, JSON.stringify(payload));
       } catch(e) {}
 
       // Limpiar el hash de la URL (seguridad: no dejar el token en el historial)
       try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
 
       // UI
+      var providerLabel = (provider === 'googleads') ? 'Google Ads' : 'Gmail';
       var content = document.getElementById('content');
       if (success) {
-        content.innerHTML = '<h1 class="ok">✓ Gmail conectado</h1><p>Volvé al dashboard. Esta ventana se cierra sola.</p>';
+        content.innerHTML = '<h1 class="ok">✓ ' + providerLabel + ' conectado</h1><p>Volvé al dashboard. Esta ventana se cierra sola.</p>';
       } else {
         content.innerHTML = '<h1 class="bad">⚠ Algo falló</h1><p>' + (payload.error || 'Error desconocido').replace(/[<>&"]/g,'') + '</p>';
       }
