@@ -46,10 +46,11 @@
         ts: Date.now()
       };
 
-      // INSTANTÁNEO: inbox key según provider (gmail / googleads / etc.)
-      var inboxKey = (provider === 'googleads')
-        ? 'actual_googleads_oauth_inbox'
-        : 'actual_gmail_oauth_inbox';
+      // INSTANTÁNEO: inbox key según provider (gmail / googleads / meta / etc.)
+      var inboxKey =
+        (provider === 'googleads') ? 'actual_googleads_oauth_inbox' :
+        (provider === 'meta')      ? 'actual_meta_oauth_inbox' :
+                                     'actual_gmail_oauth_inbox';
       try {
         localStorage.setItem(inboxKey, JSON.stringify(payload));
       } catch(e) {}
@@ -58,7 +59,10 @@
       try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
 
       // UI
-      var providerLabel = (provider === 'googleads') ? 'Google Ads' : 'Gmail';
+      var providerLabel =
+        (provider === 'googleads') ? 'Google Ads' :
+        (provider === 'meta')      ? 'Meta / Facebook' :
+                                     'Gmail';
       var content = document.getElementById('content');
       if (success) {
         content.innerHTML = '<h1 class="ok">✓ ' + providerLabel + ' conectado</h1><p>Volvé al dashboard. Esta ventana se cierra sola.</p>';

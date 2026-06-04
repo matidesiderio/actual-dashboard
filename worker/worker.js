@@ -66,6 +66,15 @@ export default {
       if (path === '/google/oauth/poll') {
         return await handleGoogleOAuthPoll(request, env, url, corsHdrs);
       }
+      if (path === '/meta/oauth/start') {
+        return await handleMetaOAuthStart(request, env, url);
+      }
+      if (path === '/meta/oauth/callback') {
+        return await handleMetaOAuthCallback(request, env, url);
+      }
+      if (path === '/meta/oauth/poll') {
+        return await handleMetaOAuthPoll(request, env, url, corsHdrs);
+      }
       if (path === '/gmail/oauth/debuglist') {
         // Debug: lista las keys oauth: que existen en KV ahora mismo
         if (!env.OAUTH_KV) return json({ error: 'KV not bound' }, 200, corsHdrs);
@@ -109,7 +118,7 @@ function corsHeaders(env, request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, x-login-customer-id, x-user-refresh-token, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, x-login-customer-id, x-user-refresh-token, x-user-meta-token, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -123,7 +132,11 @@ function json(obj, status, corsHdrs) {
 
 // ── Meta Graph API ─────────────────────────────────────────────
 async function handleMeta(request, env, url, corsHdrs) {
-  if (!env.META_TOKEN) throw new Error('META_TOKEN secret not configured');
+  // PRIORIZAR el token del USUARIO si viene en header (OAuth multi-tenant).
+  // Si no, caer al META_TOKEN del dueño (fallback / admin convivencia).
+  const userMetaToken = request.headers.get('x-user-meta-token') || '';
+  const accessToken = userMetaToken || env.META_TOKEN;
+  if (!accessToken) throw new Error('META_TOKEN secret not configured and no user token sent');
 
   const subPath = url.pathname.replace(/^\/meta\//, '');
   const upstream = new URL('https://graph.facebook.com/v21.0/' + subPath);
@@ -131,7 +144,7 @@ async function handleMeta(request, env, url, corsHdrs) {
   url.searchParams.forEach((v, k) => {
     if (k !== 'access_token') upstream.searchParams.set(k, v);
   });
-  upstream.searchParams.set('access_token', env.META_TOKEN);
+  upstream.searchParams.set('access_token', accessToken);
 
   const init = {
     method: request.method,
@@ -588,6 +601,128 @@ async function handleGoogleOAuthCallback(request, env, url) {
   } catch(e) { /* ignore */ }
 
   const result = { email: userEmail, refresh_token: tokens.refresh_token };
+  await _oauthStore(env, url.origin, session, result);
+  return redirectToBridge('ok', result);
+}
+
+// ── Meta OAuth (Facebook Login) ───────────────────────────────
+// Scopes solicitados: organic (pages_show_list, pages_read_engagement,
+// instagram_basic, read_insights) + paid (ads_read) + email.
+// Meta da access_token short-lived (~2h) que intercambiamos por uno
+// long-lived (~60 días). Después de 60 días el usuario tiene que reconectar.
+async function handleMetaOAuthStart(request, env, url) {
+  if (!env.META_APP_ID) {
+    return new Response('META_APP_ID secret not configured', { status: 500 });
+  }
+  const session = url.searchParams.get('session') || '';
+  const callbackUrl = `${url.origin}/meta/oauth/callback`;
+  const scopes = [
+    'email',
+    'public_profile',
+    'pages_show_list',
+    'pages_read_engagement',
+    'instagram_basic',
+    'read_insights',
+    'ads_read'
+  ].join(',');
+  const params = new URLSearchParams({
+    client_id: env.META_APP_ID,
+    redirect_uri: callbackUrl,
+    response_type: 'code',
+    scope: scopes,
+    state: session
+  });
+  const authUrl = 'https://www.facebook.com/v21.0/dialog/oauth?' + params.toString();
+  return Response.redirect(authUrl, 302);
+}
+
+async function handleMetaOAuthPoll(request, env, url, corsHdrs) {
+  const session = url.searchParams.get('session') || '';
+  if (!session) return json({ error: 'Missing session' }, 400, corsHdrs);
+  const data = await _oauthRetrieve(env, url.origin, session);
+  if (!data) return json({ pending: true }, 200, corsHdrs);
+  // Para Meta el campo es access_token (long-lived), no refresh_token.
+  // Reusamos el contrato del bridge usando refresh_token field para consistencia.
+  return json({
+    pending: false,
+    success: !!data.access_token,
+    email: data.email || '',
+    refresh_token: data.access_token || '',  // se mapea como "token" en el dashboard
+    expires_at: data.expires_at || null,
+    error: data.error || ''
+  }, 200, corsHdrs);
+}
+
+async function handleMetaOAuthCallback(request, env, url) {
+  const code  = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
+  const errorReason = url.searchParams.get('error_reason') || '';
+  const session = url.searchParams.get('state') || '';
+
+  const BRIDGE_URL = 'https://matidesiderio.github.io/actual-dashboard/oauth-bridge.html';
+  function redirectToBridge(statusFlag, data) {
+    const parts = ['status=' + statusFlag, 'session=' + encodeURIComponent(session), 'provider=meta'];
+    if (data) {
+      if (data.email)        parts.push('email=' + encodeURIComponent(data.email));
+      if (data.access_token) parts.push('refresh_token=' + encodeURIComponent(data.access_token));
+      if (data.error)        parts.push('error=' + encodeURIComponent(data.error));
+    }
+    return Response.redirect(BRIDGE_URL + '#' + parts.join('&'), 302);
+  }
+
+  if (error) {
+    const d = { error: 'Facebook devolvió: ' + error + (errorReason ? ' / ' + errorReason : '') };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+  if (!code) {
+    const d = { error: 'Falta el código de autorización' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+  if (!env.META_APP_ID || !env.META_APP_SECRET) {
+    const d = { error: 'META_APP_ID/SECRET no configurados en el Worker' };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+
+  // 1) Intercambiar code por access_token short-lived (~2h)
+  const tokenParams = new URLSearchParams({
+    client_id: env.META_APP_ID,
+    client_secret: env.META_APP_SECRET,
+    redirect_uri: `${url.origin}/meta/oauth/callback`,
+    code: code
+  });
+  const tokenRes = await fetch('https://graph.facebook.com/v21.0/oauth/access_token?' + tokenParams.toString());
+  const tokens = await tokenRes.json();
+  if (!tokens.access_token) {
+    const d = { error: 'Meta no devolvió access_token: ' + (tokens.error?.message || JSON.stringify(tokens)) };
+    await _oauthStore(env, url.origin, session, d);
+    return redirectToBridge('error', d);
+  }
+
+  // 2) Intercambiar short-lived → long-lived (~60 días)
+  const longParams = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: env.META_APP_ID,
+    client_secret: env.META_APP_SECRET,
+    fb_exchange_token: tokens.access_token
+  });
+  const longRes = await fetch('https://graph.facebook.com/v21.0/oauth/access_token?' + longParams.toString());
+  const longTokens = await longRes.json();
+  const finalToken = longTokens.access_token || tokens.access_token;  // fallback al short si fallara
+  const expiresInSec = longTokens.expires_in || tokens.expires_in || 0;
+  const expiresAt = expiresInSec ? (Date.now() + expiresInSec * 1000) : null;
+
+  // 3) Email del usuario
+  let userEmail = '';
+  try {
+    const meRes = await fetch('https://graph.facebook.com/v21.0/me?fields=email,name&access_token=' + encodeURIComponent(finalToken));
+    const me = await meRes.json();
+    userEmail = me.email || me.name || '';
+  } catch(e) { /* ignore */ }
+
+  const result = { email: userEmail, access_token: finalToken, expires_at: expiresAt };
   await _oauthStore(env, url.origin, session, result);
   return redirectToBridge('ok', result);
 }

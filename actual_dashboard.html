@@ -9683,7 +9683,7 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(getCurrentTheme());
   // Version stamp — visible in console (F12) to verify which build is loaded
-  console.log('%c[Actual Dashboard] build 2026-06-04-google-oauth-v23', 'color:#A4FE73;font-weight:700;');
+  console.log('%c[Actual Dashboard] build 2026-06-04-meta-oauth-v24', 'color:#A4FE73;font-weight:700;');
 });
 
 // ── Client finder state (search, pinned, recent) ────────────────
@@ -9778,7 +9778,7 @@ async function fetchClientProfilePicture(userId, forceRefresh) {
     try {
       var url = META_BASE_URL + cfg.igBusinessId
         + '?fields=profile_picture_url&access_token=' + encodeURIComponent(token);
-      var res = await fetch(url);
+      var res = await metaFetch(url);
       var data = await res.json();
       if (data && data.profile_picture_url) picUrl = data.profile_picture_url;
     } catch(e) {}
@@ -9789,7 +9789,7 @@ async function fetchClientProfilePicture(userId, forceRefresh) {
     try {
       var url2 = META_BASE_URL + cfg.fbPageId
         + '/picture?type=large&redirect=false&access_token=' + encodeURIComponent(token);
-      var res2 = await fetch(url2);
+      var res2 = await metaFetch(url2);
       var data2 = await res2.json();
       if (data2 && data2.data && data2.data.url) picUrl = data2.data.url;
     } catch(e) {}
@@ -10865,7 +10865,7 @@ async function fetchAdminCampaigns(userId) {
     url.searchParams.set('limit', '200');
     url.searchParams.set('access_token', token);
 
-    var res  = await fetch(url.toString());
+    var res  = await metaFetch(url.toString());
     var data = await res.json();
     if (data.error) throw new Error(data.error.message);
 
@@ -11160,12 +11160,12 @@ async function detectMetaAccounts(userId) {
   try {
     // Fetch FB pages + linked IG accounts
     var pagesUrl = META_BASE_URL + 'me/accounts?fields=id,name,instagram_business_account{id,username}&access_token=' + encodeURIComponent(token);
-    var pagesRes = await fetch(pagesUrl);
+    var pagesRes = await metaFetch(pagesUrl);
     var pagesData = await pagesRes.json();
 
     // Fetch ad accounts
     var adsUrl = META_BASE_URL + 'me/adaccounts?fields=id,name&access_token=' + encodeURIComponent(token);
-    var adsRes = await fetch(adsUrl);
+    var adsRes = await metaFetch(adsUrl);
     var adsData = await adsRes.json();
 
     // Populate FB Page dropdown
@@ -12170,10 +12170,42 @@ function buildConnectionsSection() {
   }
   h += '</div>';
 
-  // ── Placeholder Meta (futuro) ───────────────────────────────
-  h += '<div class="alerts-block" style="opacity:0.5;">';
-  h += '  <div class="alerts-block-title">🅼 Meta / Facebook <span style="font-size:11px;color:var(--gray);font-weight:400;margin-left:8px;">próximamente</span></div>';
-  h += '  <div class="alerts-hint" style="margin-bottom:0;">Acá vas a poder conectar Facebook Pages + Meta Ads cuando esté implementado.</div>';
+  // ── BLOQUE Meta ─────────────────────────────────────────────
+  var meta = getMyMetaConnection();
+  h += '<div class="alerts-block">';
+  h += '  <div class="alerts-block-title">🅼 Meta / Facebook <span style="font-size:11px;color:var(--gray);font-weight:400;margin-left:8px;">Pages + IG + Ads (solo lectura)</span></div>';
+  if (meta.connected && meta.access_token && !meta.expired) {
+    var expiresLabel = '';
+    if (meta.expires_at) {
+      var daysLeft = Math.max(0, Math.floor((meta.expires_at - Date.now()) / 86400000));
+      expiresLabel = ' · token vence en ' + daysLeft + ' días';
+    }
+    h += '  <div class="alerts-conn-row connected">';
+    h += '    <span class="alerts-conn-icon">✓</span>';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">' + escHtml(meta.email) + '</div>';
+    h += '      <div class="alerts-conn-source">Conectado por OAuth' + expiresLabel + '</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn-secondary" onclick="disconnectMyMeta()">Desconectar</button>';
+    h += '  </div>';
+  } else if (meta.expired) {
+    h += '  <div class="alerts-conn-row">';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email" style="color:#FF8C42;">⚠ Token Meta expirado</div>';
+    h += '      <div class="alerts-conn-source">Los tokens de Meta duran 60 días. Reconectá para seguir usando tu cuenta.</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn" onclick="connectMyMeta()">🔄 Reconectar</button>';
+    h += '  </div>';
+  } else {
+    h += '  <div class="alerts-conn-row">';
+    h += '    <div class="alerts-conn-info">';
+    h += '      <div class="alerts-conn-email">Sin Meta conectado</div>';
+    h += '      <div class="alerts-conn-source">Conectá tu cuenta para ver TUS Facebook Pages, Instagram y Meta Ads.</div>';
+    h += '    </div>';
+    h += '    <button class="alerts-conn-btn" onclick="connectMyMeta()">🔗 Conectar Meta</button>';
+    h += '  </div>';
+    h += '  <div class="alerts-hint" style="margin-top:10px;margin-bottom:0;">💡 Token long-lived de 60 días. Después hay que reconectar.</div>';
+  }
   h += '</div>';
 
   h += '</div>';
@@ -12543,6 +12575,106 @@ function disconnectMyGoogleAds() {
   setMyGoogleAdsConnection(null);
   if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
   adminShowToast('✓ Google Ads desconectado');
+}
+
+// ── Meta OAuth connect (mismo patrón) ─────────────────────────
+function connectMyMeta() {
+  var oauthSession = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+  var popupUrl = API_BASE + '/meta/oauth/start?session=' + encodeURIComponent(oauthSession);
+  var w = 520, hgt = 720;
+  var left = (window.screen.availWidth - w) / 2;
+  var top  = (window.screen.availHeight - hgt) / 2;
+  var popup = window.open(
+    popupUrl,
+    'meta-oauth-' + Date.now(),
+    'width=' + w + ',height=' + hgt + ',left=' + left + ',top=' + top + ',scrollbars=yes'
+  );
+  if (!popup) {
+    adminShowToast('⚠ Tu browser bloqueó el popup. Permití popups e intentá de nuevo.');
+    return;
+  }
+  adminShowToast('🔗 Abriendo Facebook para autorizar…');
+  console.log('[MetaOAuth] popup abierto. session=' + oauthSession);
+  try { localStorage.removeItem('actual_meta_oauth_inbox'); } catch(e) {}
+
+  var startedAt = Date.now();
+  var pollCount = 0;
+  var done = false;
+
+  function finish(data, source) {
+    if (done) return;
+    done = true;
+    clearInterval(pollInterval);
+    try { if (popup && !popup.closed) popup.close(); } catch(e) {}
+    try { localStorage.removeItem('actual_meta_oauth_inbox'); } catch(e) {}
+    if (data && data.success && data.refresh_token) {
+      console.log('[MetaOAuth] ✅ token recibido (' + source + ') para ' + data.email);
+      // En Meta el "refresh_token" del bridge es en realidad el access_token long-lived
+      setMyMetaConnection({
+        connected: true,
+        email: data.email,
+        access_token: data.refresh_token,
+        expires_at: data.expires_at || null,
+        source: 'oauth',
+        connectedAt: new Date().toISOString()
+      });
+      if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
+      adminShowToast('✅ Meta conectado: ' + data.email);
+    } else {
+      console.warn('[MetaOAuth] sin token (' + source + '):', data);
+      adminShowToast('❌ ' + ((data && data.error) || 'No se pudo conectar Meta'));
+    }
+  }
+
+  var pollInterval = setInterval(async function() {
+    pollCount++;
+    if (Date.now() - startedAt > 180000) {
+      if (!done) { clearInterval(pollInterval); if (popup && !popup.closed) try { popup.close(); } catch(e) {} adminShowToast('⚠ Tiempo agotado conectando Meta'); }
+      return;
+    }
+    // PRIMARIO — localStorage del bridge
+    try {
+      var raw = localStorage.getItem('actual_meta_oauth_inbox');
+      if (raw) {
+        var inbox = JSON.parse(raw);
+        if (!inbox.session || inbox.session === oauthSession) {
+          console.log('[MetaOAuth] localStorage inbox detectado');
+          // El bridge pasa expires_at por separado en provider=meta, lo extraemos
+          // El bridge solo persiste lo que viene en el fragment; expires_at viene en data.expires_at del poll, no del inbox
+          finish(inbox, 'localStorage');
+          return;
+        }
+      }
+    } catch(e) {}
+    // FALLBACK — KV server-side (tiene expires_at)
+    try {
+      var res = await fetch(API_BASE + '/meta/oauth/poll?session=' + encodeURIComponent(oauthSession));
+      var data = await res.json();
+      console.log('[MetaOAuth] poll #' + pollCount + ' →', JSON.stringify(data));
+      if (data && data.pending) return;
+      finish(data, 'kv');
+    } catch(e) {
+      console.error('[MetaOAuth] error en poll #' + pollCount + ':', e);
+    }
+  }, 700);
+
+  var storageHandler = function(ev) {
+    if (ev.key !== 'actual_meta_oauth_inbox' || !ev.newValue) return;
+    try {
+      var inbox = JSON.parse(ev.newValue);
+      if (!inbox.session || inbox.session === oauthSession) {
+        window.removeEventListener('storage', storageHandler);
+        finish(inbox, 'storage-event');
+      }
+    } catch(e) {}
+  };
+  window.addEventListener('storage', storageHandler);
+}
+function disconnectMyMeta() {
+  if (!confirm('¿Desconectar tu cuenta Meta? Las llamadas a Facebook/Instagram van a caer al fallback del Worker.')) return;
+  setMyMetaConnection(null);
+  if (typeof buildConnectionsSection === 'function') buildConnectionsSection();
+  adminShowToast('✓ Meta desconectado');
 }
 
 function disconnectMyGmail() {
@@ -13243,7 +13375,7 @@ async function discoverMetaAccounts() {
   var token = AGENCY_CONFIG.metaToken;
   if (!token) throw new Error(t('conn.noMetaToken'));
   var url = META_BASE_URL + 'me/adaccounts?fields=id,name,account_id,currency,account_status&limit=200&access_token=' + encodeURIComponent(token);
-  var res = await fetch(url);
+  var res = await metaFetch(url);
   var data = await res.json();
   if (data.error) throw new Error(data.error.message || 'Meta error');
   var accs = (data.data || []).map(function(a) {
@@ -13254,7 +13386,7 @@ async function discoverMetaAccounts() {
   var nextUrl = data.paging && data.paging.next;
   var pageCount = 0;
   while (nextUrl && pageCount < 5) {
-    var r2 = await fetch(nextUrl);
+    var r2 = await metaFetch(nextUrl);
     var d2 = await r2.json();
     (d2.data || []).forEach(function(a) {
       accs.push({ id: a.id, name: a.name, currency: a.currency, status: a.account_status });
@@ -13495,6 +13627,54 @@ function googleAdsProxyHeaders(loginCustomerId) {
     h['x-user-refresh-token'] = conn.refresh_token;
   }
   return h;
+}
+
+// ── Meta connections (mismo patrón que Gmail / Google Ads) ─────
+// Meta token vive 60 días. Después hay que reconectar.
+var META_CONNECTIONS_KEY = 'actual_meta_connections';
+function loadMetaConnections() {
+  try { return JSON.parse(localStorage.getItem(META_CONNECTIONS_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveMetaConnections(map) {
+  try { localStorage.setItem(META_CONNECTIONS_KEY, JSON.stringify(map)); } catch(e) {}
+}
+function getMyMetaConnection() {
+  var key = currentUserKey();
+  var map = loadMetaConnections();
+  var c = map[key];
+  if (c && c.access_token) {
+    // Marcar expirado si pasó los 60 días
+    if (c.expires_at && Date.now() > c.expires_at) {
+      c.expired = true;
+    }
+    return c;
+  }
+  return { connected: false, email: '', source: null };
+}
+function setMyMetaConnection(conn) {
+  var key = currentUserKey();
+  var map = loadMetaConnections();
+  if (conn) map[key] = conn;
+  else delete map[key];
+  saveMetaConnections(map);
+}
+// Headers para llamadas Meta. Si el usuario tiene OAuth válido → manda su token.
+// Si no o está expirado → el Worker cae al META_TOKEN del dueño (fallback).
+function metaProxyHeaders() {
+  var conn = getMyMetaConnection();
+  if (conn.connected && conn.access_token && !conn.expired) {
+    return { 'x-user-meta-token': conn.access_token };
+  }
+  return {};
+}
+// Wrapper de fetch que inyecta el header de Meta. Reemplaza fetch() para llamadas Meta.
+function metaFetch(url, opts) {
+  opts = opts || {};
+  var extra = metaProxyHeaders();
+  if (Object.keys(extra).length > 0) {
+    opts.headers = Object.assign({}, opts.headers || {}, extra);
+  }
+  return fetch(url, opts);
 }
 function addDays(dateIso, days) {
   var d = dateIso ? new Date(dateIso) : new Date();
@@ -17143,7 +17323,7 @@ async function fetchAgencyClientData(userId) {
     url.searchParams.set('time_range', JSON.stringify({ since: dr.since, until: dr.until }));
     url.searchParams.set('limit', '200');
     url.searchParams.set('access_token', token);
-    var res  = await fetch(url.toString());
+    var res  = await metaFetch(url.toString());
     var data = await res.json();
     if (data.error) throw new Error(data.error.message);
     var rows = data.data || [];
@@ -17186,7 +17366,7 @@ async function fetchAgencyClientData(userId) {
       var url = new URL(META_BASE_URL + cfg.metaAccId);
       url.searchParams.set('fields', 'account_status,disable_reason');
       url.searchParams.set('access_token', token);
-      var res  = await fetch(url.toString());
+      var res  = await metaFetch(url.toString());
       var data = await res.json();
       if (data.error) return null;
       return { status: data.account_status, disableReason: data.disable_reason || 0 };
